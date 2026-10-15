@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ReactNode, useRef, useState } from "react";
+import { ReactNode, useState } from "react";
 
 type DashboardShellProps = {
   title: string;
@@ -14,7 +14,7 @@ const navItems = [
   { href: "/", label: "Visão Geral & Correlação", icon: "grid" },
   { href: "/eventos", label: "Eventos & Lotes", icon: "ticket" },
   { href: "/divulgacao", label: "Posts do Instagram", icon: "megaphone" },
-  { href: "/importacoes", label: "Importador CSV", icon: "upload" },
+  { href: "/importacoes", label: "Importações", icon: "upload" },
   { href: "/relatorios", label: "Relatórios", icon: "chart" },
   { href: "/configuracoes", label: "Configurações", icon: "settings" },
 ];
@@ -57,14 +57,12 @@ function Navigation({ items, pathname, onNavigate }: { items: typeof navItems; p
 export function DashboardShell({ title, description, children }: DashboardShellProps) {
   const pathname = usePathname();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [selectedScope, setSelectedScope] = useState("Todos os Eventos (4 ativos)");
-  const [selectedPeriod, setSelectedPeriod] = useState("Últimos 30 dias");
-  const [selectedRange, setSelectedRange] = useState("01 Out – 30 Out (30 dias)");
+  const [selectedScope, setSelectedScope] = useState("Todos os eventos");
+  const [selectedPeriod, setSelectedPeriod] = useState("Todo o período");
+  const [selectedRange, setSelectedRange] = useState("Todo o período");
   const [isScopeOpen, setIsScopeOpen] = useState(false);
   const [isPeriodOpen, setIsPeriodOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
-  const [uploadedName, setUploadedName] = useState<string | null>(null);
-  const fileInput = useRef<HTMLInputElement>(null);
 
   const closeMenu = () => setIsMenuOpen(false);
 
@@ -88,8 +86,8 @@ export function DashboardShell({ title, description, children }: DashboardShellP
         <div className="sidebar-footer">
           <div className="system-card">
             <div className="system-title"><span>Sistema</span><i /></div>
-            <div><span>API Instagram</span><b>Online</b></div>
-            <div><span>Sincronização</span><b>Há 4 min</b></div>
+            <div><span>Base de inscrições</span><b>Conectada</b></div>
+            <div><span>Dados sociais</span><b>Aguardando</b></div>
           </div>
         </div>
       </aside>
@@ -100,24 +98,23 @@ export function DashboardShell({ title, description, children }: DashboardShellP
           <div className="header-filters">
             <div className="filter-menu">
               <button className="header-select" type="button" onClick={() => { setIsScopeOpen(!isScopeOpen); setIsPeriodOpen(false); }}><Icon name="calendar" size={15} /><span>{selectedScope}</span><b>⌄</b></button>
-              {isScopeOpen && <div className="filter-popover">{["Todos os Eventos (4 ativos)", "Circuito Cidade Viva 2026", "Meia Maratona Sunset SP", "Desafio Noturno das Pontes"].map((scope) => <button type="button" key={scope} onClick={() => { setSelectedScope(scope); setIsScopeOpen(false); }}>{scope}</button>)}</div>}
+              {isScopeOpen && <div className="filter-popover">{["Todos os eventos"].map((scope) => <button type="button" key={scope} onClick={() => { setSelectedScope(scope); setIsScopeOpen(false); }}>{scope}</button>)}</div>}
             </div>
             <div className="filter-menu period-menu">
               <button className="header-select" type="button" onClick={() => { setIsPeriodOpen(!isPeriodOpen); setIsScopeOpen(false); }}><Icon name="calendar" size={15} /><span>{selectedPeriod}</span><b>⌄</b></button>
-              {isPeriodOpen && <div className="filter-popover">{["Últimos 7 dias", "Últimos 30 dias", "Trimestre atual"].map((period) => <button type="button" key={period} onClick={() => { setSelectedPeriod(period); setIsPeriodOpen(false); }}>{period}</button>)}</div>}
+              {isPeriodOpen && <div className="filter-popover">{["Todo o período"].map((period) => <button type="button" key={period} onClick={() => { setSelectedPeriod(period); setIsPeriodOpen(false); }}>{period}</button>)}</div>}
             </div>
           </div>
           <div className="topbar-actions">
-            <input className="visually-hidden" ref={fileInput} type="file" accept=".csv,.xlsx" onChange={(event) => setUploadedName(event.target.files?.[0]?.name ?? null)} />
-            <button className="header-import" type="button" onClick={() => fileInput.current?.click()}><Icon name="upload" size={15} /> Importar CSV</button>
-            <div className="notification-wrap"><button className="notification-button" type="button" aria-label="Notificações" onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}><Icon name="bell" /><span /></button>{isNotificationsOpen && <div className="notification-popover"><strong>Atualizações recentes</strong><p>Base de inscrições sincronizada há 4 minutos.</p><p>Há 2 novos insights disponíveis.</p></div>}</div>
-            <div className="profile-summary"><span><strong>Diretoria de Prova</strong><small>{uploadedName ? `Arquivo: ${uploadedName}` : "admin@datarun.io"}</small></span><span className="avatar">DP</span></div>
+            <Link className="header-import" href="/importacoes"><Icon name="upload" size={15} /> Importar dados</Link>
+            <div className="notification-wrap"><button className="notification-button" type="button" aria-label="Notificações" onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}><Icon name="bell" /><span /></button>{isNotificationsOpen && <div className="notification-popover"><strong>Atualizações</strong><p>Os indicadores são atualizados após cada importação concluída.</p></div>}</div>
+            <div className="profile-summary"><span><strong>Área restrita</strong><small>DataRun</small></span><span className="avatar">DR</span></div>
           </div>
         </header>
         <main className="main-content">
           <div className="page-heading">
             <div><p className="page-eyebrow">Painel administrativo <i /> {description}</p><h1>{title}</h1></div>
-            <div className="range-tabs">{["01 Out – 30 Out (30 dias)", "Últimos 7 dias", "Trimestre Q3"].map((range, index) => <button className={selectedRange === range ? "active" : ""} type="button" key={range} onClick={() => setSelectedRange(range)}>{index === 0 && <Icon name="calendar" size={14} />}{range}</button>)}</div>
+            <div className="range-tabs">{["Todo o período"].map((range) => <button className={selectedRange === range ? "active" : ""} type="button" key={range} onClick={() => setSelectedRange(range)}><Icon name="calendar" size={14} />{range}</button>)}</div>
           </div>
           {children}
         </main>

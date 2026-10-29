@@ -42,14 +42,15 @@ function RegistrationTimeline({ event }: { event: DashboardEvent }) {
   </section>;
 }
 
-export function AnalyticsOverview({ data }: { data: DashboardData }) {
+export function AnalyticsOverview({ data, role }: { data: DashboardData; role: "ADMINISTRATOR" | "ORGANIZER" }) {
   const [activeEventId, setActiveEventId] = useState("all");
   const activeEvent = useMemo(() => activeEventId === "all" ? data.allEvents : data.events.find((event) => event.id === activeEventId) ?? data.allEvents, [activeEventId, data]);
   const latestImport = data.imports[0];
+  const canManage = role === "ADMINISTRATOR";
 
   return <>
     <div className="event-filter-row"><button className={activeEventId === "all" ? "active" : ""} type="button" onClick={() => setActiveEventId("all")}>Todos os eventos ({data.events.length})</button>{data.events.map((event) => <button className={activeEventId === event.id ? "active" : ""} type="button" onClick={() => setActiveEventId(event.id)} key={event.id}>{event.name}</button>)}</div>
-    <section className="sync-banner"><span>▣</span><strong>{latestImport ? "Sincronizado" : "Sem importações"}</strong><p>{latestImport ? <>Última base: <b>{latestImport.fileName}</b> ({formatNumber(latestImport.sourceRecordCount)} registros processados)</> : "Importe uma planilha de inscrições para iniciar os indicadores."}</p>{latestImport?.completedAt && <time>{formatDate(latestImport.completedAt.slice(0, 10))}</time>}<Link href="/importacoes"><span className="analytics-glyph upload">↥</span> Importar dados</Link></section>
+    <section className="sync-banner"><span>▣</span><strong>{latestImport ? "Sincronizado" : "Sem importações"}</strong><p>{latestImport ? <>Última base: <b>{latestImport.fileName}</b> ({formatNumber(latestImport.sourceRecordCount)} registros processados)</> : "A base de inscrições ainda não possui importações."}</p>{latestImport?.completedAt && <time>{formatDate(latestImport.completedAt.slice(0, 10))}</time>}{canManage ? <Link href="/importacoes"><span className="analytics-glyph upload">↥</span> Importar dados</Link> : <small>Somente visualização</small>}</section>
     <section className="analytics-metrics">
       <article><span>Total de inscrições</span><div><strong>{formatNumber(activeEvent.totalRegistrations)}</strong><i className="up-pill">{activeEvent.name}</i></div><div className="metric-detail"><span>{formatNumber(activeEvent.confirmedRegistrations)} confirmadas</span><b>{formatNumber(activeEvent.paidRegistrations)} pagas</b></div></article>
       <article><span>Receita confirmada</span><div><strong>{formatCurrency(activeEvent.revenue)}</strong><i className="ticket-pill">Pagamentos</i></div><div className="metric-detail"><span>Apenas inscrições confirmadas e pagas</span></div></article>
@@ -64,7 +65,7 @@ export function AnalyticsOverview({ data }: { data: DashboardData }) {
     </section>
     <section className="analytics-bottom">
       <section className="impact-table-panel"><div className="section-top"><div><h2>Etapas cadastradas</h2><p>Resumo calculado a partir da base de inscrições importada.</p></div><Link href="/eventos">Ver eventos →</Link></div><div className="impact-scroll"><table className="impact-table"><thead><tr><th>Etapa</th><th>Ano</th><th>Inscrições</th><th>Confirmadas</th><th>Receita</th><th>Ticket médio</th></tr></thead><tbody>{data.events.map((event) => <tr key={event.id}><td><strong>{event.name}</strong></td><td>{event.year}</td><td>{formatNumber(event.totalRegistrations)}</td><td><b>{formatNumber(event.confirmedRegistrations)}</b></td><td>{formatCurrency(event.revenue)}</td><td>{formatCurrency(event.averageTicket)}</td></tr>)}</tbody></table></div></section>
-      <aside className="memory-panel"><div className="section-top"><div><h2><span className="analytics-glyph file">▤</span> Importações recentes</h2></div><span className="active-count">{data.imports.length} registro(s)</span></div>{data.imports.length === 0 ? <p className="empty-copy">Nenhum arquivo foi processado.</p> : data.imports.slice(0, 4).map((item) => <div className="memory-file" key={item.id}><div><b>{item.fileName}</b><i>{statusLabel(item.status)}</i></div><p><strong>{formatNumber(item.sourceRecordCount)} linhas</strong> processadas <span>{item.completedAt ? formatDate(item.completedAt.slice(0, 10)) : "em andamento"}</span></p><div className="load-progress"><span /></div></div>)}<Link className="analytics-import-link" href="/importacoes">Abrir importador</Link></aside>
+      <aside className="memory-panel"><div className="section-top"><div><h2><span className="analytics-glyph file">▤</span> Importações recentes</h2></div><span className="active-count">{data.imports.length} registro(s)</span></div>{data.imports.length === 0 ? <p className="empty-copy">Nenhum arquivo foi processado.</p> : data.imports.slice(0, 4).map((item) => <div className="memory-file" key={item.id}><div><b>{item.fileName}</b><i>{statusLabel(item.status)}</i></div><p><strong>{formatNumber(item.sourceRecordCount)} linhas</strong> processadas <span>{item.completedAt ? formatDate(item.completedAt.slice(0, 10)) : "em andamento"}</span></p><div className="load-progress"><span /></div></div>)}{canManage && <Link className="analytics-import-link" href="/importacoes">Abrir importador</Link>}</aside>
     </section>
   </>;
 }

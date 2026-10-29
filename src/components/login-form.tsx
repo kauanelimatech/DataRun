@@ -9,6 +9,8 @@ export function LoginForm() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [activationCode, setActivationCode] = useState("");
+  const [needsActivationCode, setNeedsActivationCode] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -18,6 +20,27 @@ export function LoginForm() {
     setError(null);
 
     try {
+      if (!password) {
+        const response = await fetch("/api/auth/activation/start", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, code: activationCode || undefined }),
+        });
+        const payload = await response.json().catch(() => null) as { error?: string; requiresActivationCode?: boolean } | null;
+        if (!response.ok) {
+          setError(payload?.error || "Informe sua senha para acessar o painel.");
+          return;
+        }
+        if (payload?.requiresActivationCode) {
+          setNeedsActivationCode(true);
+          setError(null);
+          return;
+        }
+        router.replace("/ativar-acesso");
+        router.refresh();
+        return;
+      }
+
       const supabase = createClient();
       const { data, error: signInError } = await supabase.auth.signInWithPassword({ email, password });
 
@@ -40,5 +63,5 @@ export function LoginForm() {
     }
   }
 
-  return <main className="login-page"><section className="login-card"><span className="login-mark">↗</span><p className="section-kicker">DataRun</p><h1>Acesse o painel</h1><p>Entre com a conta autorizada para consultar ou administrar os dados dos eventos.</p><form onSubmit={signIn}><label>E-mail<input type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} required /></label><label>Senha<input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} required /></label>{error && <p className="login-error" role="alert">{error}</p>}<button className="primary-button" type="submit" disabled={isSubmitting}>{isSubmitting ? "Entrando…" : "Entrar"}</button></form><Link className="login-link" href="/recuperar-senha">Preciso de um novo acesso</Link></section></main>;
+  return <main className="login-page"><section className="login-card"><span className="login-mark">↗</span><p className="section-kicker">DataRun</p><h1>Acesse o painel</h1><p>Entre com o e-mail e a senha da conta autorizada. No primeiro acesso, deixe a senha vazia e informe o código fornecido pelo administrador.</p><form onSubmit={signIn}><label>E-mail<input type="email" autoComplete="email" value={email} onChange={(event) => { setEmail(event.target.value); setNeedsActivationCode(false); setActivationCode(""); }} required /></label><label>Senha<input type="password" autoComplete="current-password" value={password} onChange={(event) => { setPassword(event.target.value); if (event.target.value) setNeedsActivationCode(false); }} /></label>{needsActivationCode && <label>Código de ativação<input type="text" autoComplete="one-time-code" value={activationCode} onChange={(event) => setActivationCode(event.target.value)} placeholder="DR-0000-0000-0000-0000-0000-0000" required /></label>}{error && <p className="login-error" role="alert">{error}</p>}<button className="primary-button" type="submit" disabled={isSubmitting}>{isSubmitting ? "Validando…" : needsActivationCode ? "Validar código" : "Entrar"}</button></form><Link className="login-link" href="/recuperar-senha">Preciso de um novo acesso</Link></section></main>;
 }

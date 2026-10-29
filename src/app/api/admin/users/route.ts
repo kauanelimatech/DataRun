@@ -1,3 +1,6 @@
+import { randomBytes } from "node:crypto";
+
+import { createActivationCode, activationCodeExpiration, hashActivationCode } from "@/lib/auth/activation";
 import { getApiUserAccess, isAdministrator, type DashboardRole } from "@/lib/auth/access";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -8,10 +11,6 @@ const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function jsonError(message: string, status: number) {
   return Response.json({ error: message }, { status });
-}
-
-function passwordSetupUrl(request: Request) {
-  return new URL("/atualizar-senha", request.url).toString();
 }
 
 function readRole(value: unknown): DashboardRole | null {
@@ -29,31 +28,38 @@ export async function POST(request: Request) {
   if (!emailPattern.test(email)) return jsonError("Informe um e-mail válido.", 400);
 
   const admin = createAdminClient();
-  const { data: generated, error: generateError } = await admin.auth.admin.generateLink({
-    type: "invite",
+  const { data: created, error: createError } = await admin.auth.admin.createUser({
     email,
-    options: { redirectTo: passwordSetupUrl(request) },
+    password: randomBytes(48).toString("base64url"),
+    email_confirm: true,
   });
-  if (generateError || !generated?.user || !generated.properties?.action_link) {
-    return jsonError(generateError?.message || "Não foi possível criar o acesso para este e-mail.", 400);
+  if (createError || !created?.user) {
+    return jsonError(createError?.message || "Não foi possível criar o acesso para este e-mail.", 400);
   }
 
+  const activationCode = createActivationCode();
   const now = new Date().toISOString();
+  const expiresAt = activationCodeExpiration();
   const { error: profileError } = await admin
     .from("datarun_user_profiles")
     .upsert({
-      id: generated.user.id,
+      id: created.user.id,
       email,
       role,
       must_set_password: true,
       invited_at: now,
-      access_link_created_at: now,
+      access_link_created_at: null,
+      activation_code_hash: hashActivationCode(created.user.id, activationCode),
+      activation_code_created_at: now,
+      activation_code_expires_at: expiresAt,
+      activation_code_used_at: null,
       password_set_at: null,
     }, { onConflict: "id" });
   if (profileError) return jsonError("O usuário foi criado, mas não foi possível configurar as permissões do painel.", 500);
 
   return Response.json({
-    user: { id: generated.user.id, email, role },
-    accessLink: generated.properties.action_link,
+    user: { id: created.user.id, email, role },
+    activationCode,
+    activationCodeExpiresAt: expiresAt,
   }, { headers: { "Cache-Control": "no-store" } });
 }

@@ -58,11 +58,11 @@ export function PasswordUpdateForm() {
       router.replace("/");
       router.refresh();
     } catch {
-      setError("Não foi possível atualizar a senha. Solicite um novo link de recuperação.");
+      setError("Não foi possível atualizar a senha. Solicite um novo código ao administrador.");
     } finally {
       setIsSubmitting(false);
     }
   }
 
-  return <main className="login-page"><section className="login-card"><span className="login-mark">↗</span><p className="section-kicker">DataRun</p><h1>Defina uma nova senha</h1><p>Escolha uma senha nova, exclusiva para o DataRun, com pelo menos 12 caracteres.</p>{isCheckingSession ? <p className="login-status">Validando o link de acesso…</p> : hasActiveSession ? <form onSubmit={updatePassword}><label>Nova senha<input type="password" autoComplete="new-password" minLength={12} value={password} onChange={(event) => setPassword(event.target.value)} required /></label><label>Confirmar nova senha<input type="password" autoComplete="new-password" minLength={12} value={confirmation} onChange={(event) => setConfirmation(event.target.value)} required /></label>{error && <p className="login-error" role="alert">{error}</p>}<button className="primary-button" type="submit" disabled={isSubmitting}>{isSubmitting ? "Salvando…" : "Salvar nova senha"}</button></form> : <><p className="login-error" role="alert">O link de acesso é inválido ou expirou. Solicite um novo link ao administrador do DataRun.</p><Link className="login-link" href="/login">Voltar ao login</Link></>}</section></main>;
+  return <main className="login-page"><section className="login-card"><span className="login-mark">↗</span><p className="section-kicker">DataRun</p><h1>Defina uma nova senha</h1><p>Escolha uma senha nova, exclusiva para o DataRun, com pelo menos 12 caracteres.</p>{isCheckingSession ? <p className="login-status">Validando o acesso…</p> : hasActiveSession ? <form onSubmit={updatePassword}><label>Nova senha<input type="password" autoComplete="new-password" minLength={12} value={password} onChange={(event) => setPassword(event.target.value)} required /></label><label>Confirmar nova senha<input type="password" autoComplete="new-password" minLength={12} value={confirmation} onChange={(event) => setConfirmation(event.target.value)} required /></label>{error && <p className="login-error" role="alert">{error}</p>}<button className="primary-button" type="submit" disabled={isSubmitting}>{isSubmitting ? "Salvando…" : "Salvar nova senha"}</button></form> : <><p className="login-error" role="alert">Este acesso não está disponível. Solicite um código novo ao administrador do DataRun.</p><Link className="login-link" href="/login">Voltar ao login</Link></>}</section></main>;
 }

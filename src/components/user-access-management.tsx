@@ -13,13 +13,14 @@ type ManagedDashboardUser = {
   invitedAt: string | null;
   passwordResetAt: string | null;
   passwordSetAt: string | null;
-  accessLinkCreatedAt: string | null;
+  activationCodeCreatedAt: string | null;
+  activationCodeExpiresAt: string | null;
   createdAt: string;
 };
 
-type LinkResult = {
+type ActivationCodeResult = {
   email: string;
-  url: string;
+  code: string;
   reason: "invite" | "reset";
 };
 
@@ -46,12 +47,12 @@ export function UserAccessManagement({ users }: { users: ManagedDashboardUser[] 
   const [resettingId, setResettingId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [linkResult, setLinkResult] = useState<LinkResult | null>(null);
+  const [activationCodeResult, setActivationCodeResult] = useState<ActivationCodeResult | null>(null);
 
   const awaitingPasswordCount = useMemo(() => users.filter((user) => user.mustSetPassword).length, [users]);
 
   async function readResponse(response: Response) {
-    return response.json().catch(() => null) as Promise<{ error?: string; accessLink?: string; email?: string; user?: { email?: string } } | null>;
+    return response.json().catch(() => null) as Promise<{ error?: string; activationCode?: string; email?: string; user?: { email?: string } } | null>;
   }
 
   async function createAccess(event: FormEvent<HTMLFormElement>) {
@@ -59,7 +60,7 @@ export function UserAccessManagement({ users }: { users: ManagedDashboardUser[] 
     setIsCreating(true);
     setError(null);
     setMessage(null);
-    setLinkResult(null);
+    setActivationCodeResult(null);
 
     try {
       const response = await fetch("/api/admin/users", {
@@ -68,14 +69,14 @@ export function UserAccessManagement({ users }: { users: ManagedDashboardUser[] 
         body: JSON.stringify({ email, role }),
       });
       const payload = await readResponse(response);
-      if (!response.ok || !payload?.accessLink) throw new Error(payload?.error || "Não foi possível criar o acesso.");
+      if (!response.ok || !payload?.activationCode) throw new Error(payload?.error || "Não foi possível criar o acesso.");
 
-      setLinkResult({
+      setActivationCodeResult({
         email: payload.user?.email || email.trim().toLowerCase(),
-        url: payload.accessLink,
+        code: payload.activationCode,
         reason: "invite",
       });
-      setMessage("A conta foi preparada. Copie o link abaixo e entregue-o ao titular pelo canal de sua preferência.");
+      setMessage("A conta foi preparada. Copie o código abaixo e entregue-o ao titular pelo canal de sua preferência.");
       setEmail("");
       setRole("ORGANIZER");
       router.refresh();
@@ -87,40 +88,40 @@ export function UserAccessManagement({ users }: { users: ManagedDashboardUser[] 
   }
 
   async function resetPassword(user: ManagedDashboardUser) {
-    const confirmation = window.confirm(`Gerar um novo link de senha para ${user.email}? A senha atual deixará de permitir novos acessos.`);
+    const confirmation = window.confirm(`Gerar um novo código de senha para ${user.email}? A senha atual deixará de permitir novos acessos.`);
     if (!confirmation) return;
 
     setResettingId(user.id);
     setError(null);
     setMessage(null);
-    setLinkResult(null);
+    setActivationCodeResult(null);
 
     try {
       const response = await fetch(`/api/admin/users/${user.id}/reset-password`, { method: "POST" });
       const payload = await readResponse(response);
-      if (!response.ok || !payload?.accessLink) throw new Error(payload?.error || "Não foi possível gerar um novo link.");
+      if (!response.ok || !payload?.activationCode) throw new Error(payload?.error || "Não foi possível gerar um novo código.");
 
-      setLinkResult({
+      setActivationCodeResult({
         email: payload.email || user.email,
-        url: payload.accessLink,
+        code: payload.activationCode,
         reason: "reset",
       });
-      setMessage("A redefinição foi iniciada. Copie o novo link abaixo; ele substitui o acesso por senha anterior.");
+      setMessage("A redefinição foi iniciada. Copie o novo código abaixo; ele substitui o acesso por senha anterior.");
       router.refresh();
     } catch (resetError) {
-      setError(resetError instanceof Error ? resetError.message : "Não foi possível gerar um novo link.");
+      setError(resetError instanceof Error ? resetError.message : "Não foi possível gerar um novo código.");
     } finally {
       setResettingId(null);
     }
   }
 
-  async function copyAccessLink() {
-    if (!linkResult) return;
+  async function copyActivationCode() {
+    if (!activationCodeResult) return;
     try {
-      await navigator.clipboard.writeText(linkResult.url);
-      setMessage("Link copiado. Compartilhe-o apenas com o titular da conta.");
+      await navigator.clipboard.writeText(activationCodeResult.code);
+      setMessage("Código copiado. Compartilhe-o apenas com o titular da conta.");
     } catch {
-      setError("Não foi possível copiar automaticamente. Selecione e copie o link manualmente.");
+      setError("Não foi possível copiar automaticamente. Selecione e copie o código manualmente.");
     }
   }
 
@@ -137,12 +138,12 @@ export function UserAccessManagement({ users }: { users: ManagedDashboardUser[] 
     <section className="access-grid">
       <article className="access-create-card">
         <p className="section-kicker">Novo acesso</p>
-        <h2>Gerar link de ativação</h2>
-        <p>Não há envio automático de e-mail. O link aparecerá uma única vez para cópia e compartilhamento manual.</p>
+        <h2>Gerar código de ativação</h2>
+        <p>Não há envio automático de e-mail. O código aparecerá uma única vez para cópia e compartilhamento manual.</p>
         <form onSubmit={createAccess}>
           <label>E-mail do usuário<input type="email" value={email} autoComplete="email" onChange={(event) => setEmail(event.target.value)} placeholder="organizador@empresa.com" required /></label>
           <label>Nível de acesso<select value={role} onChange={(event) => setRole(event.target.value as DashboardRole)}><option value="ORGANIZER">Organizador — somente visualização</option><option value="ADMINISTRATOR">Administrador — edição total</option></select></label>
-          <button className="primary-button" type="submit" disabled={isCreating}>{isCreating ? "Gerando…" : "Gerar link de ativação"}</button>
+          <button className="primary-button" type="submit" disabled={isCreating}>{isCreating ? "Gerando…" : "Gerar código de ativação"}</button>
         </form>
       </article>
 
@@ -150,27 +151,27 @@ export function UserAccessManagement({ users }: { users: ManagedDashboardUser[] 
         <p className="section-kicker">Como funciona</p>
         <ol>
           <li>Cadastre o e-mail e o nível de acesso.</li>
-          <li>Copie o link exibido e envie-o pelo canal escolhido.</li>
-          <li>O titular abre o link e define a própria senha.</li>
-          <li>Após um reset, gere e compartilhe um novo link.</li>
+          <li>Copie o código exibido e envie-o pelo canal escolhido.</li>
+          <li>O titular informa e-mail, código e cria a própria senha.</li>
+          <li>Após um reset, gere e compartilhe um novo código.</li>
         </ol>
-        <p>Os links são sensíveis: não os registre em planilhas, conversas públicas ou documentos compartilhados.</p>
+      <p>Os códigos são sensíveis: não os registre em planilhas, conversas públicas ou documentos compartilhados.</p>
       </article>
     </section>
 
-    {(message || error || linkResult) && <section className={`access-result ${error ? "error" : ""}`} role={error ? "alert" : "status"}>
+    {(message || error || activationCodeResult) && <section className={`access-result ${error ? "error" : ""}`} role={error ? "alert" : "status"}>
       {message && <p>{message}</p>}
       {error && <p>{error}</p>}
-      {linkResult && <div className="access-link-output"><div><strong>{linkResult.reason === "invite" ? "Link de ativação" : "Link de redefinição"}</strong><span>{linkResult.email}</span></div><input aria-label="Link de acesso gerado" value={linkResult.url} readOnly onFocus={(event) => event.currentTarget.select()} /><button className="outline-button" type="button" onClick={copyAccessLink}>Copiar link</button></div>}
+      {activationCodeResult && <div className="access-link-output"><div><strong>{activationCodeResult.reason === "invite" ? "Código de ativação" : "Código de redefinição"}</strong><span>{activationCodeResult.email}</span></div><input aria-label="Código de acesso gerado" value={activationCodeResult.code} readOnly onFocus={(event) => event.currentTarget.select()} /><button className="outline-button" type="button" onClick={copyActivationCode}>Copiar código</button></div>}
     </section>}
 
     <section className="access-list-panel">
-      <div className="access-list-heading"><div><p className="section-kicker">Acessos atuais</p><h2>Usuários cadastrados</h2></div><p>Use “Redefinir senha” para invalidar a senha atual e gerar um novo link manual.</p></div>
+      <div className="access-list-heading"><div><p className="section-kicker">Acessos atuais</p><h2>Usuários cadastrados</h2></div><p>Use “Redefinir senha” para invalidar a senha atual e gerar um novo código manual.</p></div>
       <div className="access-list">
         {users.map((user) => <article className="access-user-row" key={user.id}>
           <div className="access-user-identity"><span className="access-avatar">{user.email.slice(0, 1).toUpperCase()}</span><div><strong>{user.email}</strong><small>Cadastrado em {formatDate(user.createdAt)}</small></div></div>
           <span className={`role-badge ${user.role.toLowerCase()}`}>{roleLabel(user.role)}</span>
-          <div className="access-user-status"><strong className={user.mustSetPassword ? "awaiting" : "ready"}>{user.mustSetPassword ? "Aguardando senha" : "Ativo"}</strong><small>{user.mustSetPassword ? `Link gerado: ${formatDate(user.accessLinkCreatedAt)}` : `Senha definida: ${formatDate(user.passwordSetAt)}`}</small></div>
+          <div className="access-user-status"><strong className={user.mustSetPassword ? "awaiting" : "ready"}>{user.mustSetPassword ? "Aguardando senha" : "Ativo"}</strong><small>{user.mustSetPassword ? `Código gerado: ${formatDate(user.activationCodeCreatedAt)}` : `Senha definida: ${formatDate(user.passwordSetAt)}`}</small></div>
           <button className="outline-button" type="button" onClick={() => resetPassword(user)} disabled={resettingId === user.id}>{resettingId === user.id ? "Gerando…" : "Redefinir senha"}</button>
         </article>)}
       </div>

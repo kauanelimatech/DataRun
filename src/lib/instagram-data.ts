@@ -74,14 +74,15 @@ export type InstagramReviewCategory = {
 
 export type InstagramSuggestedPost = {
   postId: string;
-  categoryId: string;
-  categoryName: string;
-  confidence: number | null;
-  source: string;
   caption: string | null;
   permalink: string | null;
   publishedAt: string;
   mediaType: string;
+  suggestedCategories: Array<{
+    id: string;
+    name: string;
+    confidence: number | null;
+  }>;
 };
 
 export async function getInstagramContentSummary(): Promise<InstagramContentSummary> {
@@ -125,27 +126,33 @@ export async function getInstagramReviewQueue(limit = 24) {
     .select("post_id, category_id, confidence, source, instagram_posts!inner(id, caption, permalink, published_at, media_type), content_categories!inner(id, name, slug)")
     .eq("review_status", "suggested")
     .order("created_at", { ascending: true })
-    .limit(limit);
+    .limit(limit * 4);
 
   if (error) throw new Error("Não foi possível carregar as sugestões de categoria.");
 
-  return ((data ?? []) as SuggestedPostRow[]).flatMap((row) => {
+  const posts = new Map<string, InstagramSuggestedPost>();
+  ((data ?? []) as SuggestedPostRow[]).forEach((row) => {
     const post = Array.isArray(row.instagram_posts) ? row.instagram_posts[0] : row.instagram_posts;
     const category = Array.isArray(row.content_categories) ? row.content_categories[0] : row.content_categories;
-    if (!post || !category) return [];
+    if (!post || !category) return;
     const confidence = typeof row.confidence === "number" ? row.confidence : Number(row.confidence);
-    return [{
+    const current = posts.get(row.post_id) ?? {
       postId: row.post_id,
-      categoryId: row.category_id,
-      categoryName: category.name,
-      confidence: Number.isFinite(confidence) ? confidence : null,
-      source: row.source,
       caption: post.caption,
       permalink: post.permalink,
       publishedAt: post.published_at,
       mediaType: post.media_type,
-    } satisfies InstagramSuggestedPost];
+      suggestedCategories: [],
+    } satisfies InstagramSuggestedPost;
+    current.suggestedCategories.push({
+      id: row.category_id,
+      name: category.name,
+      confidence: Number.isFinite(confidence) ? confidence : null,
+    });
+    posts.set(row.post_id, current);
   });
+
+  return Array.from(posts.values()).slice(0, limit);
 }
 
 export async function getInstagramReviewCategories(): Promise<InstagramReviewCategory[]> {

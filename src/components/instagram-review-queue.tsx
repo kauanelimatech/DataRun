@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { InstagramReviewCategory, InstagramSuggestedPost } from "@/lib/instagram-data";
 
-type ReviewAction = "confirm" | "reject" | "recategorize";
+type ReviewAction = "confirm" | "reject";
 
 type InstagramReviewQueueProps = {
   suggestions: InstagramSuggestedPost[];
@@ -23,25 +23,34 @@ function previewCaption(value: string | null) {
 
 export function InstagramReviewQueue({ suggestions, categories, pendingReviewCount }: InstagramReviewQueueProps) {
   const router = useRouter();
-  const [selectedCategories, setSelectedCategories] = useState<Record<string, string>>({});
+  const [selectedCategories, setSelectedCategories] = useState<Record<string, string[]>>({});
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [error, setError] = useState("");
+
+  function selectedFor(suggestion: InstagramSuggestedPost) {
+    return selectedCategories[suggestion.postId] ?? suggestion.suggestedCategories.map((category) => category.id);
+  }
+
+  function toggleCategory(postId: string, categoryId: string, current: string[]) {
+    setSelectedCategories((selected) => ({
+      ...selected,
+      [postId]: current.includes(categoryId)
+        ? current.filter((id) => id !== categoryId)
+        : [...current, categoryId],
+    }));
+  }
 
   async function review(suggestion: InstagramSuggestedPost, action: ReviewAction) {
     setProcessingId(suggestion.postId);
     setError("");
-    const replacementCategoryId = selectedCategories[suggestion.postId] ?? suggestion.categoryId;
-    const resolvedAction = action === "confirm" && replacementCategoryId !== suggestion.categoryId ? "recategorize" : action;
-
     try {
       const response = await fetch("/api/integrations/instagram/categories/review", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           postId: suggestion.postId,
-          categoryId: suggestion.categoryId,
-          action: resolvedAction,
-          replacementCategoryId: resolvedAction === "recategorize" ? replacementCategoryId : undefined,
+          action,
+          categoryIds: action === "confirm" ? selectedFor(suggestion) : [],
         }),
       });
       const payload = await response.json() as { error?: string };
@@ -63,27 +72,28 @@ export function InstagramReviewQueue({ suggestions, categories, pendingReviewCou
       <div className="review-heading">
         <div>
           <p className="section-kicker">Revisão editorial</p>
-          <h2>Confirme as sugestões antes dos relatórios</h2>
-          <p>{pendingReviewCount.toLocaleString("pt-BR")} sugestão(ões) aguardando revisão. Esta lista mostra as próximas {suggestions.length}.</p>
+          <h2>Confirme as categorias dos posts</h2>
+          <p>{pendingReviewCount.toLocaleString("pt-BR")} classificação(ões) aguardando revisão. Selecione uma ou mais tags e confirme o post.</p>
         </div>
       </div>
       {error && <p className="review-error">{error}</p>}
       <div className="review-list">
         {suggestions.map((suggestion) => {
-          const selectedCategoryId = selectedCategories[suggestion.postId] ?? suggestion.categoryId;
+          const selected = selectedFor(suggestion);
           const isProcessing = processingId === suggestion.postId;
-          return <article className="review-post" key={`${suggestion.postId}-${suggestion.categoryId}`}>
+          return <article className="review-post" key={suggestion.postId}>
             <div className="review-post-meta"><span>{suggestion.mediaType}</span><time dateTime={suggestion.publishedAt}>{formattedDate(suggestion.publishedAt)}</time></div>
             <p className="review-caption">{previewCaption(suggestion.caption)}</p>
+            <div className="review-tags" aria-label="Categorias do post">
+              {categories.map((category) => {
+                const suggested = suggestion.suggestedCategories.find((item) => item.id === category.id);
+                const isSelected = selected.includes(category.id);
+                return <button className={`review-tag ${isSelected ? "selected" : ""} ${suggested ? "suggested" : ""}`} type="button" key={category.id} onClick={() => toggleCategory(suggestion.postId, category.id, selected)} disabled={isProcessing} aria-pressed={isSelected}>{category.name}{suggested?.confidence !== null && suggested?.confidence !== undefined && <small>{Math.round(suggested.confidence * 100)}%</small>}</button>;
+              })}
+            </div>
             <div className="review-controls">
-              <label>Categoria
-                <select value={selectedCategoryId} onChange={(event) => setSelectedCategories((current) => ({ ...current, [suggestion.postId]: event.target.value }))} disabled={isProcessing}>
-                  {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
-                </select>
-              </label>
-              <span className="review-suggestion">Sugestão: <strong>{suggestion.categoryName}</strong>{suggestion.confidence !== null && <> · {Math.round(suggestion.confidence * 100)}%</>}</span>
               {suggestion.permalink && <a href={suggestion.permalink} target="_blank" rel="noreferrer">Abrir post ↗</a>}
-              <div className="review-actions"><button className="outline-button" type="button" onClick={() => review(suggestion, "reject")} disabled={isProcessing}>Rejeitar</button><button className="primary-button" type="button" onClick={() => review(suggestion, "confirm")} disabled={isProcessing}>{isProcessing ? "Salvando…" : selectedCategoryId === suggestion.categoryId ? "Confirmar" : "Confirmar alteração"}</button></div>
+              <div className="review-actions"><button className="outline-button" type="button" onClick={() => review(suggestion, "reject")} disabled={isProcessing}>Rejeitar todas</button><button className="primary-button" type="button" onClick={() => review(suggestion, "confirm")} disabled={isProcessing || selected.length === 0}>{isProcessing ? "Salvando…" : "Confirmar tags"}</button></div>
             </div>
           </article>;
         })}

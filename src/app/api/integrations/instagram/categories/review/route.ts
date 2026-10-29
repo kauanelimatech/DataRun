@@ -3,8 +3,6 @@ import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
-type ReviewAction = "confirm" | "reject" | "recategorize";
-
 function jsonError(message: string, status: number) {
   return Response.json({ error: message }, { status });
 }
@@ -22,67 +20,57 @@ export async function PATCH(request: Request) {
 
   const body = await request.json().catch(() => null) as {
     postId?: unknown;
-    categoryId?: unknown;
     action?: unknown;
-    replacementCategoryId?: unknown;
+    categoryIds?: unknown;
   } | null;
-
-  const action = body?.action;
-  if (!isUuid(body?.postId) || !isUuid(body?.categoryId) || !["confirm", "reject", "recategorize"].includes(String(action))) {
+  const categoryIds = Array.isArray(body?.categoryIds) ? body.categoryIds : [];
+  if (!isUuid(body?.postId) || !["confirm", "reject"].includes(String(body?.action)) || !categoryIds.every(isUuid)) {
     return jsonError("A revisão enviada não é válida.", 400);
+  }
+  if (body?.action === "confirm" && categoryIds.length === 0) {
+    return jsonError("Selecione pelo menos uma categoria ou rejeite todas as sugestões.", 400);
   }
 
   const admin = createAdminClient();
-  if (action === "recategorize") {
-    if (!isUuid(body?.replacementCategoryId)) return jsonError("Selecione a categoria correta para o post.", 400);
-
-    if (body.replacementCategoryId === body.categoryId) {
-      const { error } = await admin
-        .from("instagram_post_categories")
-        .update({ review_status: "confirmed", updated_at: new Date().toISOString() })
-        .eq("post_id", body.postId)
-        .eq("category_id", body.categoryId);
-      if (error) return jsonError("Não foi possível confirmar a categoria.", 500);
-      return Response.json({ status: "confirmed" });
-    }
-
-    const { data: category, error: categoryError } = await admin
+  if (body?.action === "confirm") {
+    const uniqueCategoryIds = [...new Set(categoryIds)];
+    const { data: activeCategories, error: categoryError } = await admin
       .from("content_categories")
       .select("id")
-      .eq("id", body.replacementCategoryId)
       .eq("is_active", true)
-      .maybeSingle();
-    if (categoryError || !category) return jsonError("A categoria escolhida não está disponível.", 400);
-
-    const { error: saveReplacementError } = await admin
-      .from("instagram_post_categories")
-      .upsert({
-        post_id: body.postId,
-        category_id: body.replacementCategoryId,
-        source: "manual",
-        confidence: null,
-        review_status: "confirmed",
-        updated_at: new Date().toISOString(),
-      }, { onConflict: "post_id,category_id" });
-    if (saveReplacementError) return jsonError("Não foi possível salvar a categoria escolhida.", 500);
+      .in("id", uniqueCategoryIds);
+    if (categoryError || activeCategories?.length !== uniqueCategoryIds.length) {
+      return jsonError("Uma das categorias escolhidas não está disponível.", 400);
+    }
 
     const { error: rejectPreviousError } = await admin
       .from("instagram_post_categories")
       .update({ review_status: "rejected", updated_at: new Date().toISOString() })
       .eq("post_id", body.postId)
-      .eq("category_id", body.categoryId);
-    if (rejectPreviousError) return jsonError("A nova categoria foi salva, mas não foi possível encerrar a sugestão anterior.", 500);
+      .eq("review_status", "suggested");
+    if (rejectPreviousError) return jsonError("Não foi possível atualizar as sugestões anteriores.", 500);
 
-    return Response.json({ status: "recategorized" });
+    const { error: saveCategoriesError } = await admin
+      .from("instagram_post_categories")
+      .upsert(uniqueCategoryIds.map((categoryId) => ({
+        post_id: body.postId,
+        category_id: categoryId,
+        source: "manual",
+        confidence: null,
+        review_status: "confirmed",
+        updated_at: new Date().toISOString(),
+      })), { onConflict: "post_id,category_id" });
+    if (saveCategoriesError) return jsonError("Não foi possível confirmar as categorias escolhidas.", 500);
+
+    return Response.json({ status: "confirmed", categoryCount: uniqueCategoryIds.length });
   }
 
-  const reviewStatus = action === "confirm" ? "confirmed" : "rejected";
   const { error } = await admin
     .from("instagram_post_categories")
-    .update({ review_status: reviewStatus, updated_at: new Date().toISOString() })
+    .update({ review_status: "rejected", updated_at: new Date().toISOString() })
     .eq("post_id", body.postId)
-    .eq("category_id", body.categoryId);
-  if (error) return jsonError("Não foi possível registrar a revisão.", 500);
+    .eq("review_status", "suggested");
+  if (error) return jsonError("Não foi possível rejeitar as sugestões.", 500);
 
-  return Response.json({ status: reviewStatus });
+  return Response.json({ status: "rejected" });
 }

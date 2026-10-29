@@ -1,8 +1,8 @@
 import { DashboardShell } from "@/components/dashboard-shell";
 import { RegistrationImportForm } from "@/components/registration-import-form";
-import { requireUser } from "@/lib/auth/require-user";
+import { requireAdministrator } from "@/lib/auth/access";
 
 export default async function ImportsPage() {
-  await requireUser();
-  return <DashboardShell title="Importar inscrições" description="Valide e atualize a base que alimenta os indicadores do evento."><RegistrationImportForm /></DashboardShell>;
+  const access = await requireAdministrator();
+  return <DashboardShell title="Importar inscrições" description="Valide e atualize a base que alimenta os indicadores do evento." role={access.role}><RegistrationImportForm /></DashboardShell>;
 }

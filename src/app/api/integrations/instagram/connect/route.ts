@@ -1,18 +1,18 @@
 import { randomBytes } from "node:crypto";
 
 import { NextResponse } from "next/server";
+import { getApiUserAccess, isAdministrator } from "@/lib/auth/access";
 import { createInstagramAuthorizationUrl } from "@/lib/instagram/oauth";
-import { createClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
-  const supabase = await createClient();
-  const { data, error } = await supabase.auth.getClaims();
-  if (error || typeof data?.claims?.sub !== "string") {
+  const access = await getApiUserAccess();
+  if (!access) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
+  if (!isAdministrator(access)) return NextResponse.redirect(new URL("/divulgacao?instagram=forbidden", request.url));
 
   try {
     const state = randomBytes(32).toString("base64url");

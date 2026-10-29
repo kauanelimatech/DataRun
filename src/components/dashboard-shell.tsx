@@ -10,15 +10,27 @@ type DashboardShellProps = {
   description: string;
   children: ReactNode;
   socialConnectionStatus?: "connected" | "error" | "waiting";
+  role: "ADMINISTRATOR" | "ORGANIZER";
 };
 
-const navItems = [
+type NavItem = {
+  href: string;
+  label: string;
+  icon: string;
+};
+
+const navItems: NavItem[] = [
   { href: "/", label: "Visão Geral & Correlação", icon: "grid" },
   { href: "/eventos", label: "Eventos & Lotes", icon: "ticket" },
   { href: "/divulgacao", label: "Posts do Instagram", icon: "megaphone" },
-  { href: "/importacoes", label: "Importações", icon: "upload" },
+  { href: "/inscricoes", label: "Inscrições", icon: "chart" },
   { href: "/relatorios", label: "Relatórios", icon: "chart" },
+];
+
+const administratorNavItems: NavItem[] = [
+  { href: "/importacoes", label: "Importações", icon: "upload" },
   { href: "/configuracoes", label: "Configurações", icon: "settings" },
+  { href: "/usuarios", label: "Acessos", icon: "users" },
 ];
 
 function Icon({ name, size = 18 }: { name: string; size?: number }) {
@@ -35,12 +47,13 @@ function Icon({ name, size = 18 }: { name: string; size?: number }) {
     bell: <><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" /><path d="M10 21h4" /></>,
     chevron: <path d="m9 18 6-6-6-6" />,
     close: <><path d="m6 6 12 12M18 6 6 18" /></>,
+    users: <><circle cx="9" cy="8" r="3" /><circle cx="17" cy="9" r="2.3" /><path d="M3.5 20c.5-3.1 2.6-5 5.5-5s5 1.9 5.5 5" /><path d="M14.5 15.8c2.1.4 3.5 1.8 3.9 4.2" /></>,
   };
 
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>;
 }
 
-function Navigation({ items, pathname, onNavigate }: { items: typeof navItems; pathname: string; onNavigate: () => void }) {
+function Navigation({ items, pathname, onNavigate }: { items: NavItem[]; pathname: string; onNavigate: () => void }) {
   return (
     <nav className="sidebar-nav">
       {items.map((item) => {
@@ -56,7 +69,7 @@ function Navigation({ items, pathname, onNavigate }: { items: typeof navItems; p
   );
 }
 
-export function DashboardShell({ title, description, children, socialConnectionStatus }: DashboardShellProps) {
+export function DashboardShell({ title, description, children, socialConnectionStatus, role }: DashboardShellProps) {
   const pathname = usePathname();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [selectedScope, setSelectedScope] = useState("Todos os eventos");
@@ -67,6 +80,7 @@ export function DashboardShell({ title, description, children, socialConnectionS
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
 
   const closeMenu = () => setIsMenuOpen(false);
+  const isAdministrator = role === "ADMINISTRATOR";
 
   return (
     <div className="app-shell">
@@ -84,6 +98,11 @@ export function DashboardShell({ title, description, children, socialConnectionS
           <p className="nav-group-label">Navegação</p>
           <Navigation items={navItems} pathname={pathname} onNavigate={closeMenu} />
         </div>
+
+        {isAdministrator && <div className="nav-group nav-group-management">
+          <p className="nav-group-label">Administração</p>
+          <Navigation items={administratorNavItems} pathname={pathname} onNavigate={closeMenu} />
+        </div>}
 
         <div className="sidebar-footer">
           <div className="system-card">
@@ -108,14 +127,14 @@ export function DashboardShell({ title, description, children, socialConnectionS
             </div>
           </div>
           <div className="topbar-actions">
-            <Link className="header-import" href="/importacoes"><Icon name="upload" size={15} /> Importar dados</Link>
+            {isAdministrator && <Link className="header-import" href="/importacoes"><Icon name="upload" size={15} /> Importar dados</Link>}
             <div className="notification-wrap"><button className="notification-button" type="button" aria-label="Notificações" onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}><Icon name="bell" /><span /></button>{isNotificationsOpen && <div className="notification-popover"><strong>Atualizações</strong><p>Os indicadores são atualizados após cada importação concluída.</p></div>}</div>
-            <div className="profile-summary"><span><strong>Área restrita</strong><small>DataRun</small></span><span className="avatar">DR</span></div>
+            <div className="profile-summary"><span><strong>{isAdministrator ? "Administrador" : "Organizador"}</strong><small>DataRun</small></span><span className="avatar">DR</span></div>
           </div>
         </header>
         <main className="main-content">
           <div className="page-heading">
-            <div><p className="page-eyebrow">Painel administrativo <i /> {description}</p><h1>{title}</h1></div>
+            <div><p className="page-eyebrow">{isAdministrator ? "Painel administrativo" : "Painel do organizador"} <i /> {description}</p><h1>{title}</h1></div>
             <div className="range-tabs">{["Todo o período"].map((range) => <button className={selectedRange === range ? "active" : ""} type="button" key={range} onClick={() => setSelectedRange(range)}><Icon name="calendar" size={14} />{range}</button>)}</div>
           </div>
           {children}

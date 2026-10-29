@@ -1,8 +1,8 @@
 import { createHash, createHmac } from "node:crypto";
 
 import { type ParsedRegistration, parseRegistrationFile, RegistrationFileValidationError } from "@/lib/imports/registration-file";
+import { getApiUserAccess, isAdministrator } from "@/lib/auth/access";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { createClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -101,16 +101,10 @@ function toDatabaseRegistration(record: ParsedRegistration, eventId: string, imp
   };
 }
 
-async function verifyUser() {
-  const supabase = await createClient();
-  const { data, error } = await supabase.auth.getClaims();
-  const userId = typeof data?.claims?.sub === "string" ? data.claims.sub : null;
-  return { userId: error ? null : userId };
-}
-
 export async function POST(request: Request) {
-  const { userId } = await verifyUser();
-  if (!userId) return jsonError("Faça login para importar arquivos.", 401);
+  const access = await getApiUserAccess();
+  if (!access) return jsonError("Faça login para importar arquivos.", 401);
+  if (!isAdministrator(access)) return jsonError("Somente administradores podem importar arquivos.", 403);
 
   let formData: FormData;
   try {
@@ -165,7 +159,7 @@ export async function POST(request: Request) {
       event_id: null,
       source_file_name: file.name,
       source_file_checksum: checksum,
-      imported_by: userId,
+      imported_by: access.id,
       status: "processing",
       source_record_count: parsed.sourceRecordCount,
       error_details: [],

@@ -1,7 +1,7 @@
+import { getApiUserAccess, isAdministrator } from "@/lib/auth/access";
 import { decryptInstagramToken } from "@/lib/instagram/oauth";
 import { syncInstagramMedia } from "@/lib/instagram/meta-sync";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { createClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,10 +11,9 @@ function jsonError(message: string, status: number) {
 }
 
 export async function POST() {
-  const supabase = await createClient();
-  const { data, error: authError } = await supabase.auth.getClaims();
-  const userId = typeof data?.claims?.sub === "string" ? data.claims.sub : null;
-  if (authError || !userId) return jsonError("Faça login para sincronizar o Instagram.", 401);
+  const access = await getApiUserAccess();
+  if (!access) return jsonError("Faça login para sincronizar o Instagram.", 401);
+  if (!isAdministrator(access)) return jsonError("Somente administradores podem sincronizar o Instagram.", 403);
 
   const admin = createAdminClient();
   const { data: connection, error: connectionError } = await admin
@@ -28,7 +27,7 @@ export async function POST() {
 
   const { data: run, error: createRunError } = await admin
     .from("instagram_sync_runs")
-    .insert({ connection_id: connection.id, triggered_by: userId, status: "processing" })
+    .insert({ connection_id: connection.id, triggered_by: access.id, status: "processing" })
     .select("id")
     .single();
   if (createRunError || !run) return jsonError("Não foi possível iniciar a sincronização.", 500);

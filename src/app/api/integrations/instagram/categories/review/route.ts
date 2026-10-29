@@ -1,5 +1,5 @@
+import { getApiUserAccess, isAdministrator } from "@/lib/auth/access";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
@@ -12,11 +12,9 @@ function isUuid(value: unknown): value is string {
 }
 
 export async function PATCH(request: Request) {
-  const supabase = await createClient();
-  const { data: claims, error: authError } = await supabase.auth.getClaims();
-  if (authError || typeof claims?.claims?.sub !== "string") {
-    return jsonError("Faça login para revisar as categorias.", 401);
-  }
+  const access = await getApiUserAccess();
+  if (!access) return jsonError("Faça login para revisar as categorias.", 401);
+  if (!isAdministrator(access)) return jsonError("Somente administradores podem revisar as categorias.", 403);
 
   const body = await request.json().catch(() => null) as {
     postId?: unknown;

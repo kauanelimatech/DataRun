@@ -1,14 +1,13 @@
+import { getApiUserAccess } from "@/lib/auth/access";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
 type ConnectionStatus = "connected" | "error" | "waiting";
 
 export async function GET() {
-  const supabase = await createClient();
-  const { data: claims, error: authError } = await supabase.auth.getClaims();
-  if (authError || typeof claims?.claims?.sub !== "string") {
+  const access = await getApiUserAccess();
+  if (!access) {
     return Response.json({ error: "Faça login para consultar a integração do Instagram." }, { status: 401 });
   }
 

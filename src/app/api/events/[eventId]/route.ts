@@ -1,5 +1,5 @@
+import { getApiUserAccess, isAdministrator } from "@/lib/auth/access";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
@@ -12,11 +12,9 @@ function isUuid(value: string) {
 }
 
 export async function DELETE(_request: Request, { params }: { params: Promise<{ eventId: string }> }) {
-  const supabase = await createClient();
-  const { data: claims, error: authError } = await supabase.auth.getClaims();
-  if (authError || typeof claims?.claims?.sub !== "string") {
-    return jsonError("Faça login para excluir um evento.", 401);
-  }
+  const access = await getApiUserAccess();
+  if (!access) return jsonError("Faça login para excluir um evento.", 401);
+  if (!isAdministrator(access)) return jsonError("Somente administradores podem excluir eventos.", 403);
 
   const { eventId } = await params;
   if (!isUuid(eventId)) return jsonError("O evento informado não é válido.", 400);

@@ -5,7 +5,8 @@ import { requireUser } from "@/lib/auth/require-user";
 import { getInstagramContentSummary, getInstagramReviewCategories, getInstagramReviewQueue } from "@/lib/instagram-data";
 
 export default async function OutreachPage() {
-  await requireUser();
+  const access = await requireUser();
+  const canManage = access.role === "ADMINISTRATOR";
   const [content, suggestions, categories] = await Promise.all([
     getInstagramContentSummary(),
     getInstagramReviewQueue(),
@@ -20,6 +21,7 @@ export default async function OutreachPage() {
       title="Posts do Instagram"
       description="Classificação editorial e métricas dos conteúdos publicados."
       socialConnectionStatus={socialConnectionStatus}
+      role={access.role}
     >
       <section className="content-taxonomy-intro">
         <div>
@@ -41,7 +43,7 @@ export default async function OutreachPage() {
           <h2>{content.connection?.status === "connected" ? "Conta do Instagram autorizada" : "Conecte a conta profissional do Instagram"}</h2>
           <p>{content.connection?.status === "connected" ? "A sincronização importa posts, métricas disponíveis e sugestões de categoria." : "A autorização é feita diretamente pela Meta. O token será criptografado antes de ser salvo."}</p>
         </div>
-        {content.connection?.status === "connected" ? <InstagramSyncButton /> : <a className="primary-button" href="/api/integrations/instagram/connect">Conectar Instagram</a>}
+        {canManage && (content.connection?.status === "connected" ? <InstagramSyncButton /> : <a className="primary-button" href="/api/integrations/instagram/connect">Conectar Instagram</a>)}
       </section>
 
       <section className="category-grid" aria-label="Categorias de conteúdo">
@@ -59,11 +61,11 @@ export default async function OutreachPage() {
         ))}
       </section>
 
-      <InstagramReviewQueue
+      {canManage && <InstagramReviewQueue
         suggestions={suggestions}
         categories={categories}
         pendingReviewCount={content.categories.reduce((total, category) => total + category.suggestedPosts, 0)}
-      />
+      />}
 
       {content.postCount === 0 && (
         <section className="empty-state-panel">

@@ -1,9 +1,9 @@
 import { timingSafeEqual } from "node:crypto";
 
 import { NextResponse } from "next/server";
+import { getApiUserAccess, isAdministrator } from "@/lib/auth/access";
 import { encryptInstagramToken, exchangeInstagramAuthorizationCode, getInstagramAccount } from "@/lib/instagram/oauth";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { createClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -34,10 +34,8 @@ export async function GET(request: Request) {
 
   if (error || !code || !statesMatch(expectedState, state)) return redirectToOutreach(request, "authorization-error");
 
-  const supabase = await createClient();
-  const { data, error: authError } = await supabase.auth.getClaims();
-  const userId = typeof data?.claims?.sub === "string" ? data.claims.sub : null;
-  if (authError || !userId) return redirectToOutreach(request, "authorization-error");
+  const access = await getApiUserAccess();
+  if (!isAdministrator(access)) return redirectToOutreach(request, "authorization-error");
 
   try {
     const token = await exchangeInstagramAuthorizationCode(code);
@@ -53,7 +51,7 @@ export async function GET(request: Request) {
         token_expires_at: expiresAt,
         granted_scopes: token.scopes,
         status: "connected",
-        connected_by: userId,
+        connected_by: access.id,
         connected_at: new Date().toISOString(),
         last_sync_error: null,
       }, { onConflict: "instagram_user_id" });

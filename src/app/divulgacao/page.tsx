@@ -1,16 +1,25 @@
 import { DashboardShell } from "@/components/dashboard-shell";
+import { InstagramReviewQueue } from "@/components/instagram-review-queue";
 import { InstagramSyncButton } from "@/components/instagram-sync-button";
 import { requireUser } from "@/lib/auth/require-user";
-import { getInstagramContentSummary } from "@/lib/instagram-data";
+import { getInstagramContentSummary, getInstagramReviewCategories, getInstagramReviewQueue } from "@/lib/instagram-data";
 
 export default async function OutreachPage() {
   await requireUser();
-  const content = await getInstagramContentSummary();
+  const [content, suggestions, categories] = await Promise.all([
+    getInstagramContentSummary(),
+    getInstagramReviewQueue(),
+    getInstagramReviewCategories(),
+  ]);
+  const socialConnectionStatus = content.connection?.status === "connected" || content.connection?.status === "error"
+    ? content.connection.status
+    : "waiting";
 
   return (
     <DashboardShell
       title="Posts do Instagram"
       description="Classificação editorial e métricas dos conteúdos publicados."
+      socialConnectionStatus={socialConnectionStatus}
     >
       <section className="content-taxonomy-intro">
         <div>
@@ -49,6 +58,12 @@ export default async function OutreachPage() {
           </article>
         ))}
       </section>
+
+      <InstagramReviewQueue
+        suggestions={suggestions}
+        categories={categories}
+        pendingReviewCount={content.categories.reduce((total, category) => total + category.suggestedPosts, 0)}
+      />
 
       {content.postCount === 0 && (
         <section className="empty-state-panel">

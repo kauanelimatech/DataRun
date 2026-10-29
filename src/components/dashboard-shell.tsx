@@ -9,6 +9,7 @@ type DashboardShellProps = {
   title: string;
   description: string;
   children: ReactNode;
+  socialConnectionStatus?: "connected" | "error" | "waiting";
 };
 
 const navItems = [
@@ -55,7 +56,7 @@ function Navigation({ items, pathname, onNavigate }: { items: typeof navItems; p
   );
 }
 
-export function DashboardShell({ title, description, children }: DashboardShellProps) {
+export function DashboardShell({ title, description, children, socialConnectionStatus }: DashboardShellProps) {
   const pathname = usePathname();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [selectedScope, setSelectedScope] = useState("Todos os eventos");
@@ -88,7 +89,7 @@ export function DashboardShell({ title, description, children }: DashboardShellP
           <div className="system-card">
             <div className="system-title"><span>Sistema</span><i /></div>
             <div><span>Base de inscrições</span><b>Conectada</b></div>
-            <div><span>Dados sociais</span><SocialConnectionStatus /></div>
+            <div><span>Dados sociais</span><SocialConnectionStatus initialStatus={socialConnectionStatus} /></div>
           </div>
         </div>
       </aside>

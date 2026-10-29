@@ -4,14 +4,18 @@ import { useEffect, useState } from "react";
 
 type ConnectionStatus = "connected" | "error" | "waiting";
 
+type SocialConnectionStatusProps = {
+  initialStatus?: ConnectionStatus;
+};
+
 const labels: Record<ConnectionStatus, string> = {
   connected: "Conectada",
   error: "Verificar",
   waiting: "Aguardando",
 };
 
-export function SocialConnectionStatus() {
-  const [status, setStatus] = useState<ConnectionStatus>("waiting");
+export function SocialConnectionStatus({ initialStatus = "waiting" }: SocialConnectionStatusProps) {
+  const [status, setStatus] = useState<ConnectionStatus>(initialStatus);
 
   useEffect(() => {
     let isCurrent = true;

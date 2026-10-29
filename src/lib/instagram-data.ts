@@ -20,6 +20,35 @@ type ConnectionRow = {
   last_synced_at: string | null;
 };
 
+type SuggestedPostRow = {
+  post_id: string;
+  category_id: string;
+  confidence: number | string | null;
+  source: string;
+  instagram_posts: {
+    id: string;
+    caption: string | null;
+    permalink: string | null;
+    published_at: string;
+    media_type: string;
+  } | Array<{
+    id: string;
+    caption: string | null;
+    permalink: string | null;
+    published_at: string;
+    media_type: string;
+  }> | null;
+  content_categories: {
+    id: string;
+    name: string;
+    slug: string;
+  } | Array<{
+    id: string;
+    name: string;
+    slug: string;
+  }> | null;
+};
+
 export type InstagramCategorySummary = {
   id: string;
   slug: string;
@@ -36,6 +65,23 @@ export type InstagramContentSummary = {
     status: string;
     lastSyncedAt: string | null;
   } | null;
+};
+
+export type InstagramReviewCategory = {
+  id: string;
+  name: string;
+};
+
+export type InstagramSuggestedPost = {
+  postId: string;
+  categoryId: string;
+  categoryName: string;
+  confidence: number | null;
+  source: string;
+  caption: string | null;
+  permalink: string | null;
+  publishedAt: string;
+  mediaType: string;
 };
 
 export async function getInstagramContentSummary(): Promise<InstagramContentSummary> {
@@ -70,4 +116,46 @@ export async function getInstagramContentSummary(): Promise<InstagramContentSumm
       lastSyncedAt: connectionRow.last_synced_at,
     } : null,
   };
+}
+
+export async function getInstagramReviewQueue(limit = 24) {
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("instagram_post_categories")
+    .select("post_id, category_id, confidence, source, instagram_posts!inner(id, caption, permalink, published_at, media_type), content_categories!inner(id, name, slug)")
+    .eq("review_status", "suggested")
+    .order("created_at", { ascending: true })
+    .limit(limit);
+
+  if (error) throw new Error("Não foi possível carregar as sugestões de categoria.");
+
+  return ((data ?? []) as SuggestedPostRow[]).flatMap((row) => {
+    const post = Array.isArray(row.instagram_posts) ? row.instagram_posts[0] : row.instagram_posts;
+    const category = Array.isArray(row.content_categories) ? row.content_categories[0] : row.content_categories;
+    if (!post || !category) return [];
+    const confidence = typeof row.confidence === "number" ? row.confidence : Number(row.confidence);
+    return [{
+      postId: row.post_id,
+      categoryId: row.category_id,
+      categoryName: category.name,
+      confidence: Number.isFinite(confidence) ? confidence : null,
+      source: row.source,
+      caption: post.caption,
+      permalink: post.permalink,
+      publishedAt: post.published_at,
+      mediaType: post.media_type,
+    } satisfies InstagramSuggestedPost];
+  });
+}
+
+export async function getInstagramReviewCategories(): Promise<InstagramReviewCategory[]> {
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("content_categories")
+    .select("id, name")
+    .eq("is_active", true)
+    .order("display_order");
+
+  if (error) throw new Error("Não foi possível carregar as categorias de revisão.");
+  return (data ?? []) as InstagramReviewCategory[];
 }

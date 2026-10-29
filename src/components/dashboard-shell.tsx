@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ReactNode, useState } from "react";
+import { SocialConnectionStatus } from "@/components/social-connection-status";
 
 type DashboardShellProps = {
   title: string;
@@ -87,7 +88,7 @@ export function DashboardShell({ title, description, children }: DashboardShellP
           <div className="system-card">
             <div className="system-title"><span>Sistema</span><i /></div>
             <div><span>Base de inscrições</span><b>Conectada</b></div>
-            <div><span>Dados sociais</span><b>Aguardando</b></div>
+            <div><span>Dados sociais</span><SocialConnectionStatus /></div>
           </div>
         </div>
       </aside>

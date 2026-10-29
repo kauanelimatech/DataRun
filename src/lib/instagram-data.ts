@@ -152,7 +152,12 @@ export async function getInstagramReviewQueue(limit = 24) {
     posts.set(row.post_id, current);
   });
 
-  return Array.from(posts.values()).slice(0, limit);
+  return Array.from(posts.values())
+    .map((post) => ({
+      ...post,
+      suggestedCategories: post.suggestedCategories.sort((left, right) => (right.confidence ?? 0) - (left.confidence ?? 0)),
+    }))
+    .slice(0, limit);
 }
 
 export async function getInstagramReviewCategories(): Promise<InstagramReviewCategory[]> {

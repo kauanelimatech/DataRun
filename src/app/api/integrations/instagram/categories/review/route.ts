@@ -27,13 +27,14 @@ export async function PATCH(request: Request) {
   if (!isUuid(body?.postId) || !["confirm", "reject"].includes(String(body?.action)) || !categoryIds.every(isUuid)) {
     return jsonError("A revisão enviada não é válida.", 400);
   }
-  if (body?.action === "confirm" && categoryIds.length === 0) {
-    return jsonError("Selecione pelo menos uma categoria ou rejeite todas as sugestões.", 400);
+  if (body?.action === "confirm" && categoryIds.length !== 1) {
+    return jsonError("Selecione exatamente uma categoria ou rejeite a sugestão.", 400);
   }
 
   const admin = createAdminClient();
   if (body?.action === "confirm") {
     const uniqueCategoryIds = [...new Set(categoryIds)];
+    if (uniqueCategoryIds.length !== 1) return jsonError("Selecione exatamente uma categoria.", 400);
     const { data: activeCategories, error: categoryError } = await admin
       .from("content_categories")
       .select("id")

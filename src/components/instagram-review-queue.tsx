@@ -28,15 +28,13 @@ export function InstagramReviewQueue({ suggestions, categories, pendingReviewCou
   const [error, setError] = useState("");
 
   function selectedFor(suggestion: InstagramSuggestedPost) {
-    return selectedCategories[suggestion.postId] ?? suggestion.suggestedCategories.map((category) => category.id);
+    return selectedCategories[suggestion.postId] ?? suggestion.suggestedCategories.slice(0, 1).map((category) => category.id);
   }
 
-  function toggleCategory(postId: string, categoryId: string, current: string[]) {
+  function selectCategory(postId: string, categoryId: string) {
     setSelectedCategories((selected) => ({
       ...selected,
-      [postId]: current.includes(categoryId)
-        ? current.filter((id) => id !== categoryId)
-        : [...current, categoryId],
+      [postId]: [categoryId],
     }));
   }
 
@@ -73,7 +71,7 @@ export function InstagramReviewQueue({ suggestions, categories, pendingReviewCou
         <div>
           <p className="section-kicker">Revisão editorial</p>
           <h2>Confirme as categorias dos posts</h2>
-          <p>{pendingReviewCount.toLocaleString("pt-BR")} classificação(ões) aguardando revisão. Selecione uma ou mais tags e confirme o post.</p>
+          <p>{pendingReviewCount.toLocaleString("pt-BR")} classificação(ões) aguardando revisão. Selecione uma única tag e confirme o post.</p>
         </div>
       </div>
       {error && <p className="review-error">{error}</p>}
@@ -88,7 +86,7 @@ export function InstagramReviewQueue({ suggestions, categories, pendingReviewCou
               {categories.map((category) => {
                 const suggested = suggestion.suggestedCategories.find((item) => item.id === category.id);
                 const isSelected = selected.includes(category.id);
-                return <button className={`review-tag ${isSelected ? "selected" : ""} ${suggested ? "suggested" : ""}`} type="button" key={category.id} onClick={() => toggleCategory(suggestion.postId, category.id, selected)} disabled={isProcessing} aria-pressed={isSelected}>{category.name}{suggested?.confidence !== null && suggested?.confidence !== undefined && <small>{Math.round(suggested.confidence * 100)}%</small>}</button>;
+                return <button className={`review-tag ${isSelected ? "selected" : ""} ${suggested ? "suggested" : ""}`} type="button" key={category.id} onClick={() => selectCategory(suggestion.postId, category.id)} disabled={isProcessing} aria-pressed={isSelected}>{category.name}{suggested?.confidence !== null && suggested?.confidence !== undefined && <small>{Math.round(suggested.confidence * 100)}%</small>}</button>;
               })}
             </div>
             <div className="review-controls">

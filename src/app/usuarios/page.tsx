@@ -13,7 +13,7 @@ export default async function UsersPage() {
       description="Convites, níveis de permissão e redefinição de senha."
       role={access.role}
     >
-      <UserAccessManagement users={users} />
+      <UserAccessManagement users={users} currentUserId={access.id} />
     </DashboardShell>
   );
 }

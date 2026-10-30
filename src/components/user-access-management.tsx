@@ -39,12 +39,16 @@ function roleLabel(role: DashboardRole) {
   return role === "ADMINISTRATOR" ? "Administrador" : "Organizador";
 }
 
-export function UserAccessManagement({ users }: { users: ManagedDashboardUser[] }) {
+export function UserAccessManagement({ users, currentUserId }: { users: ManagedDashboardUser[]; currentUserId: string }) {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<DashboardRole>("ORGANIZER");
   const [isCreating, setIsCreating] = useState(false);
   const [resettingId, setResettingId] = useState<string | null>(null);
+  const [updatingRoleId, setUpdatingRoleId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [roleEdits, setRoleEdits] = useState<Record<string, DashboardRole>>({});
+  const [deleteTarget, setDeleteTarget] = useState<ManagedDashboardUser | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [activationCodeResult, setActivationCodeResult] = useState<ActivationCodeResult | null>(null);
@@ -115,6 +119,60 @@ export function UserAccessManagement({ users }: { users: ManagedDashboardUser[] 
     }
   }
 
+  async function updateRole(user: ManagedDashboardUser) {
+    const role = roleEdits[user.id] ?? user.role;
+    if (role === user.role) return;
+
+    setUpdatingRoleId(user.id);
+    setError(null);
+    setMessage(null);
+    setActivationCodeResult(null);
+
+    try {
+      const response = await fetch(`/api/admin/users/${user.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role }),
+      });
+      const payload = await readResponse(response);
+      if (!response.ok) throw new Error(payload?.error || "Não foi possível atualizar o nível de acesso.");
+
+      setMessage(`${user.email} agora possui nível de ${roleLabel(role).toLowerCase()}.`);
+      setRoleEdits((current) => {
+        const { [user.id]: _unused, ...remaining } = current;
+        return remaining;
+      });
+      router.refresh();
+    } catch (updateError) {
+      setError(updateError instanceof Error ? updateError.message : "Não foi possível atualizar o nível de acesso.");
+    } finally {
+      setUpdatingRoleId(null);
+    }
+  }
+
+  async function deleteAccess() {
+    if (!deleteTarget) return;
+
+    setDeletingId(deleteTarget.id);
+    setError(null);
+    setMessage(null);
+    setActivationCodeResult(null);
+
+    try {
+      const response = await fetch(`/api/admin/users/${deleteTarget.id}`, { method: "DELETE" });
+      const payload = await readResponse(response);
+      if (!response.ok) throw new Error(payload?.error || "Não foi possível excluir este acesso.");
+
+      setMessage(`O acesso de ${deleteTarget.email} foi excluído e não poderá mais entrar no DataRun.`);
+      setDeleteTarget(null);
+      router.refresh();
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : "Não foi possível excluir este acesso.");
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
   async function copyActivationCode() {
     if (!activationCodeResult) return;
     try {
@@ -166,15 +224,34 @@ export function UserAccessManagement({ users }: { users: ManagedDashboardUser[] 
     </section>}
 
     <section className="access-list-panel">
-      <div className="access-list-heading"><div><p className="section-kicker">Acessos atuais</p><h2>Usuários cadastrados</h2></div><p>Use “Redefinir senha” para invalidar a senha atual e gerar um novo código manual.</p></div>
+      <div className="access-list-heading"><div><p className="section-kicker">Acessos atuais</p><h2>Usuários cadastrados</h2></div><p>Altere o nível, redefina a senha ou remova definitivamente um acesso.</p></div>
       <div className="access-list">
-        {users.map((user) => <article className="access-user-row" key={user.id}>
+        {users.map((user) => {
+          const isCurrentUser = user.id === currentUserId;
+          const selectedRole = roleEdits[user.id] ?? user.role;
+          const isUpdatingRole = updatingRoleId === user.id;
+          const isDeleting = deletingId === user.id;
+
+          return <article className="access-user-row" key={user.id}>
           <div className="access-user-identity"><span className="access-avatar">{user.email.slice(0, 1).toUpperCase()}</span><div><strong>{user.email}</strong><small>Cadastrado em {formatDate(user.createdAt)}</small></div></div>
-          <span className={`role-badge ${user.role.toLowerCase()}`}>{roleLabel(user.role)}</span>
+          <div className="access-user-role"><span className={`role-badge ${user.role.toLowerCase()}`}>{roleLabel(user.role)}</span>{isCurrentUser ? <small>Conta atual</small> : <><label className="sr-only" htmlFor={`role-${user.id}`}>Nível de acesso de {user.email}</label><select id={`role-${user.id}`} value={selectedRole} onChange={(event) => setRoleEdits((current) => ({ ...current, [user.id]: event.target.value as DashboardRole }))} disabled={isUpdatingRole || isDeleting}><option value="ORGANIZER">Organizador</option><option value="ADMINISTRATOR">Administrador</option></select><button className="text-button" type="button" onClick={() => updateRole(user)} disabled={selectedRole === user.role || isUpdatingRole || isDeleting}>{isUpdatingRole ? "Salvando…" : "Salvar nível"}</button></>}</div>
           <div className="access-user-status"><strong className={user.mustSetPassword ? "awaiting" : "ready"}>{user.mustSetPassword ? "Aguardando senha" : "Ativo"}</strong><small>{user.mustSetPassword ? `Código gerado: ${formatDate(user.activationCodeCreatedAt)}` : `Senha definida: ${formatDate(user.passwordSetAt)}`}</small></div>
-          <button className="outline-button" type="button" onClick={() => resetPassword(user)} disabled={resettingId === user.id}>{resettingId === user.id ? "Gerando…" : "Redefinir senha"}</button>
-        </article>)}
+          <div className="access-user-actions"><button className="outline-button" type="button" onClick={() => resetPassword(user)} disabled={resettingId === user.id || isDeleting}>{resettingId === user.id ? "Gerando…" : "Redefinir senha"}</button>{!isCurrentUser && <button className="danger-button" type="button" onClick={() => { setError(null); setDeleteTarget(user); }} disabled={isUpdatingRole || isDeleting}>{isDeleting ? "Excluindo…" : "Excluir"}</button>}</div>
+        </article>;
+        })}
       </div>
     </section>
+    {deleteTarget && <div className="modal-backdrop" role="presentation">
+      <section className="confirmation-modal" role="dialog" aria-modal="true" aria-labelledby={`delete-access-title-${deleteTarget.id}`}>
+        <p className="section-kicker">Excluir acesso</p>
+        <h2 id={`delete-access-title-${deleteTarget.id}`}>Excluir “{deleteTarget.email}”?</h2>
+        <p>A conta será removida do DataRun e não poderá mais entrar no sistema. Para devolver o acesso depois, será necessário cadastrar o e-mail novamente e gerar outro código de ativação.</p>
+        {error && <p className="modal-error">{error}</p>}
+        <div className="modal-actions">
+          <button className="outline-button" type="button" onClick={() => setDeleteTarget(null)} disabled={deletingId === deleteTarget.id}>Cancelar</button>
+          <button className="danger-button confirm-delete-button" type="button" onClick={deleteAccess} disabled={deletingId === deleteTarget.id}>{deletingId === deleteTarget.id ? "Excluindo…" : "Excluir acesso"}</button>
+        </div>
+      </section>
+    </div>}
   </div>;
 }

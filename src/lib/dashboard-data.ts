@@ -36,6 +36,48 @@ type ImportRow = {
   created_at: string;
 };
 
+type InstagramPostRow = {
+  id: string;
+  caption: string | null;
+  permalink: string | null;
+  published_at: string;
+  media_type: string;
+};
+
+type InstagramMetricSnapshotRow = {
+  post_id: string;
+  collected_at: string;
+  reach: number | string | null;
+  views: number | string | null;
+  likes: number | string | null;
+  comments: number | string | null;
+  shares: number | string | null;
+  saves: number | string | null;
+};
+
+type InstagramCategoryAssignmentRow = {
+  post_id: string;
+  category_id: string;
+  review_status: string;
+  updated_at: string;
+};
+
+type ContentCategoryRow = {
+  id: string;
+  name: string;
+};
+
+type SocialPost = {
+  id: string;
+  caption: string | null;
+  permalink: string | null;
+  publishedDate: string;
+  mediaType: string;
+  categoryName: string;
+  reach: number;
+  engagement: number;
+};
+
 export type DailyRegistration = {
   date: string;
   registrations: number;
@@ -45,6 +87,51 @@ export type DailyRegistration = {
 export type ValueBreakdown = {
   label: string;
   value: number;
+};
+
+export type CorrelationDailyPoint = {
+  date: string;
+  registrations: number;
+  revenue: number;
+  posts: number;
+  reach: number;
+  engagement: number;
+};
+
+export type ContentCategoryImpact = {
+  name: string;
+  postCount: number;
+  reach: number;
+  engagement: number;
+  averageRegistrations24h: number;
+  averageRegistrationLift24h: number | null;
+};
+
+export type PostCorrelationImpact = {
+  id: string;
+  caption: string | null;
+  permalink: string | null;
+  publishedDate: string;
+  mediaType: string;
+  categoryName: string;
+  reach: number;
+  engagement: number;
+  registrations24h: number;
+  registrationLift24h: number | null;
+};
+
+export type DashboardCorrelation = {
+  hasComparablePeriod: boolean;
+  startDate: string | null;
+  endDate: string | null;
+  postCount: number;
+  reach: number;
+  engagement: number;
+  correlationWithPosts: number | null;
+  correlationWithEngagement: number | null;
+  daily: CorrelationDailyPoint[];
+  categoryImpacts: ContentCategoryImpact[];
+  topPostImpacts: PostCorrelationImpact[];
 };
 
 export type DashboardEvent = {
@@ -79,6 +166,7 @@ export type DashboardData = {
   events: DashboardEvent[];
   allEvents: DashboardEvent;
   imports: DashboardImport[];
+  correlations: Record<string, DashboardCorrelation>;
 };
 
 function normalizeStatus(value: string) {
@@ -136,12 +224,205 @@ async function fetchAllRegistrations() {
   }
 }
 
+type PageResult<T> = {
+  data: T[] | null;
+  error: unknown;
+};
+
+async function fetchAllPages<T>(fetchPage: (from: number, to: number) => Promise<PageResult<T>>) {
+  const rows: T[] = [];
+
+  for (let from = 0; ; from += PAGE_SIZE) {
+    const { data, error } = await fetchPage(from, from + PAGE_SIZE - 1);
+    if (error) throw new Error("Não foi possível carregar os dados sociais para o painel.");
+
+    const page = data ?? [];
+    rows.push(...page);
+    if (page.length < PAGE_SIZE) return rows;
+  }
+}
+
+async function fetchSocialPosts(): Promise<SocialPost[]> {
+  const admin = createAdminClient();
+  const [posts, snapshots, assignments, categories] = await Promise.all([
+    fetchAllPages<InstagramPostRow>(async (from, to) => admin
+      .from("instagram_posts")
+      .select("id, caption, permalink, published_at, media_type")
+      .order("id", { ascending: true })
+      .range(from, to)),
+    fetchAllPages<InstagramMetricSnapshotRow>(async (from, to) => admin
+      .from("instagram_post_metric_snapshots")
+      .select("post_id, collected_at, reach, views, likes, comments, shares, saves")
+      .order("post_id", { ascending: true })
+      .order("collected_at", { ascending: true })
+      .range(from, to)),
+    fetchAllPages<InstagramCategoryAssignmentRow>(async (from, to) => admin
+      .from("instagram_post_categories")
+      .select("post_id, category_id, review_status, updated_at")
+      .order("post_id", { ascending: true })
+      .order("category_id", { ascending: true })
+      .range(from, to)),
+    admin.from("content_categories").select("id, name"),
+  ]);
+
+  if (categories.error) throw new Error("Não foi possível carregar as categorias sociais para o painel.");
+
+  const categoryNameById = new Map(((categories.data ?? []) as ContentCategoryRow[]).map((category) => [category.id, category.name]));
+  const latestMetricByPost = new Map<string, InstagramMetricSnapshotRow>();
+  snapshots.forEach((snapshot) => {
+    const current = latestMetricByPost.get(snapshot.post_id);
+    if (!current || current.collected_at < snapshot.collected_at) latestMetricByPost.set(snapshot.post_id, snapshot);
+  });
+
+  const confirmedCategoryByPost = new Map<string, InstagramCategoryAssignmentRow>();
+  assignments
+    .filter((assignment) => assignment.review_status === "confirmed")
+    .forEach((assignment) => {
+      const current = confirmedCategoryByPost.get(assignment.post_id);
+      if (!current || current.updated_at < assignment.updated_at) confirmedCategoryByPost.set(assignment.post_id, assignment);
+    });
+
+  return posts.flatMap((post) => {
+    const date = post.published_at.slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return [];
+
+    const metric = latestMetricByPost.get(post.id);
+    const category = confirmedCategoryByPost.get(post.id);
+    return [{
+      id: post.id,
+      caption: post.caption,
+      permalink: post.permalink,
+      publishedDate: date,
+      mediaType: post.media_type,
+      categoryName: categoryNameById.get(category?.category_id ?? "") ?? "Sem categoria",
+      reach: asNumber(metric?.reach ?? 0),
+      engagement: asNumber(metric?.likes ?? 0) + asNumber(metric?.comments ?? 0) + asNumber(metric?.shares ?? 0) + asNumber(metric?.saves ?? 0),
+    } satisfies SocialPost];
+  });
+}
+
+function addDays(date: string, days: number) {
+  const value = new Date(`${date}T00:00:00Z`);
+  value.setUTCDate(value.getUTCDate() + days);
+  return value.toISOString().slice(0, 10);
+}
+
+function pearson(left: number[], right: number[]) {
+  if (left.length !== right.length || left.length < 3) return null;
+  const leftMean = left.reduce((total, value) => total + value, 0) / left.length;
+  const rightMean = right.reduce((total, value) => total + value, 0) / right.length;
+  let covariance = 0;
+  let leftVariance = 0;
+  let rightVariance = 0;
+  left.forEach((value, index) => {
+    const leftDifference = value - leftMean;
+    const rightDifference = right[index] - rightMean;
+    covariance += leftDifference * rightDifference;
+    leftVariance += leftDifference * leftDifference;
+    rightVariance += rightDifference * rightDifference;
+  });
+  const denominator = Math.sqrt(leftVariance * rightVariance);
+  return denominator === 0 ? null : covariance / denominator;
+}
+
+function emptyCorrelation(): DashboardCorrelation {
+  return {
+    hasComparablePeriod: false,
+    startDate: null,
+    endDate: null,
+    postCount: 0,
+    reach: 0,
+    engagement: 0,
+    correlationWithPosts: null,
+    correlationWithEngagement: null,
+    daily: [],
+    categoryImpacts: [],
+    topPostImpacts: [],
+  };
+}
+
+function buildCorrelation(records: RegistrationRow[], socialPosts: SocialPost[]): DashboardCorrelation {
+  const registrations = daily(records);
+  if (registrations.length === 0) return emptyCorrelation();
+
+  const startDate = registrations[0].date;
+  const endDate = registrations.at(-1)!.date;
+  const registrationsByDate = new Map(registrations.map((item) => [item.date, item]));
+  const posts = socialPosts.filter((post) => post.publishedDate >= startDate && post.publishedDate <= endDate);
+  const postsByDate = new Map<string, SocialPost[]>();
+  posts.forEach((post) => {
+    const current = postsByDate.get(post.publishedDate) ?? [];
+    current.push(post);
+    postsByDate.set(post.publishedDate, current);
+  });
+
+  const points: CorrelationDailyPoint[] = [];
+  for (let date = startDate; date <= endDate; date = addDays(date, 1)) {
+    const registration = registrationsByDate.get(date);
+    const dailyPosts = postsByDate.get(date) ?? [];
+    points.push({
+      date,
+      registrations: registration?.registrations ?? 0,
+      revenue: registration?.revenue ?? 0,
+      posts: dailyPosts.length,
+      reach: dailyPosts.reduce((total, post) => total + post.reach, 0),
+      engagement: dailyPosts.reduce((total, post) => total + post.engagement, 0),
+    });
+  }
+
+  const impacts = posts.map((post) => {
+    const registrations24h = (registrationsByDate.get(post.publishedDate)?.registrations ?? 0)
+      + (registrationsByDate.get(addDays(post.publishedDate, 1))?.registrations ?? 0);
+    const precedingWeek = Array.from({ length: 7 }, (_, index) => registrationsByDate.get(addDays(post.publishedDate, -index - 1))?.registrations ?? 0);
+    const baseline = precedingWeek.reduce((total, value) => total + value, 0) / precedingWeek.length;
+    const hasBaseline = precedingWeek.some((value) => value > 0);
+    return {
+      ...post,
+      registrations24h,
+      registrationLift24h: hasBaseline ? registrations24h - baseline * 2 : null,
+    } satisfies PostCorrelationImpact;
+  });
+
+  const categoryTotals = new Map<string, { postCount: number; reach: number; engagement: number; registrations24h: number; lifts: number[] }>();
+  impacts.forEach((post) => {
+    const current = categoryTotals.get(post.categoryName) ?? { postCount: 0, reach: 0, engagement: 0, registrations24h: 0, lifts: [] };
+    current.postCount += 1;
+    current.reach += post.reach;
+    current.engagement += post.engagement;
+    current.registrations24h += post.registrations24h;
+    if (post.registrationLift24h !== null) current.lifts.push(post.registrationLift24h);
+    categoryTotals.set(post.categoryName, current);
+  });
+
+  return {
+    hasComparablePeriod: posts.length > 0,
+    startDate,
+    endDate,
+    postCount: posts.length,
+    reach: posts.reduce((total, post) => total + post.reach, 0),
+    engagement: posts.reduce((total, post) => total + post.engagement, 0),
+    correlationWithPosts: pearson(points.map((point) => point.registrations), points.map((point) => point.posts)),
+    correlationWithEngagement: pearson(points.map((point) => point.registrations), points.map((point) => point.engagement)),
+    daily: points,
+    categoryImpacts: Array.from(categoryTotals, ([name, totals]) => ({
+      name,
+      postCount: totals.postCount,
+      reach: totals.reach,
+      engagement: totals.engagement,
+      averageRegistrations24h: totals.postCount === 0 ? 0 : totals.registrations24h / totals.postCount,
+      averageRegistrationLift24h: totals.lifts.length === 0 ? null : totals.lifts.reduce((total, value) => total + value, 0) / totals.lifts.length,
+    })).sort((left, right) => right.averageRegistrations24h - left.averageRegistrations24h || right.engagement - left.engagement),
+    topPostImpacts: impacts.sort((left, right) => (right.registrationLift24h ?? -Infinity) - (left.registrationLift24h ?? -Infinity) || right.registrations24h - left.registrations24h).slice(0, 6),
+  };
+}
+
 export async function getDashboardData(): Promise<DashboardData> {
   const admin = createAdminClient();
-  const [{ data: eventRows, error: eventError }, registrationRows, { data: importRows, error: importError }] = await Promise.all([
+  const [{ data: eventRows, error: eventError }, registrationRows, { data: importRows, error: importError }, socialPosts] = await Promise.all([
     admin.from("events").select("id, name, edition_year, source_stage, event_date").order("edition_year", { ascending: false }).order("name"),
     fetchAllRegistrations(),
     admin.from("registration_imports").select("id, source_file_name, status, source_record_count, inserted_record_count, updated_record_count, completed_at, created_at").order("created_at", { ascending: false }).limit(8),
+    fetchSocialPosts(),
   ]);
 
   if (eventError) throw new Error("Não foi possível carregar os eventos do painel.");
@@ -187,7 +468,14 @@ export async function getDashboardData(): Promise<DashboardData> {
     createdAt: importRow.created_at,
   }));
 
-  return { events, allEvents: combineEvents(events), imports };
+  const correlations: Record<string, DashboardCorrelation> = {
+    all: buildCorrelation(registrationRows, socialPosts),
+  };
+  events.forEach((event) => {
+    correlations[event.id] = buildCorrelation(recordsByEvent.get(event.id) ?? [], socialPosts);
+  });
+
+  return { events, allEvents: combineEvents(events), imports, correlations };
 }
 
 export function combineEvents(events: DashboardEvent[]): DashboardEvent {

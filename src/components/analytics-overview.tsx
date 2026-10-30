@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ContentCategoryImpact, DashboardCorrelation, DashboardData, DashboardEvent, PostCorrelationImpact, ValueBreakdown } from "@/lib/dashboard-data";
 
 function formatNumber(value: number) {
@@ -45,6 +45,46 @@ function formatSignedNumber(value: number | null) {
   if (value === null) return "—";
   const rounded = Math.round(value * 10) / 10;
   return `${rounded > 0 ? "+" : ""}${new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 1 }).format(rounded)}`;
+}
+
+function useAnimatedNumber(value: number, duration = 850) {
+  const [displayValue, setDisplayValue] = useState(0);
+
+  useEffect(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setDisplayValue(value);
+      return;
+    }
+
+    let frame = 0;
+    const startedAt = performance.now();
+    const animate = (now: number) => {
+      const progress = Math.min(1, (now - startedAt) / duration);
+      setDisplayValue(value * (1 - (1 - progress) ** 3));
+      if (progress < 1) frame = requestAnimationFrame(animate);
+    };
+
+    setDisplayValue(0);
+    frame = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(frame);
+  }, [duration, value]);
+
+  return displayValue;
+}
+
+function AnimatedNumber({ value, format, duration }: { value: number; format: (value: number) => string; duration?: number }) {
+  const displayValue = useAnimatedNumber(value, duration);
+  return <>{format(displayValue)}</>;
+}
+
+function AnimatedCorrelation({ value }: { value: number | null }) {
+  const displayValue = useAnimatedNumber(value ?? 0, 750);
+  return <>{value === null ? "Sem base" : formatCorrelation(displayValue)}</>;
+}
+
+function chartAnimationDelay(index: number, total: number, offset = 0) {
+  const interval = Math.min(55, Math.max(22, 680 / Math.max(total, 1)));
+  return `${Math.round(offset + index * interval)}ms`;
 }
 
 function Breakdown({ title, items, emptyText }: { title: string; items: ValueBreakdown[]; emptyText: string }) {
@@ -206,7 +246,33 @@ function CorrelationTimeline({ event, correlation, lotDeadlines }: { event: Dash
 
   return <section className="correlation-panel registration-timeline-panel">
     <div className="correlation-header"><div><h2><span className="analytics-glyph chart">↗</span> Inscrições {isAllEvents ? "semanais" : "diárias"} × publicações do Instagram</h2><p>{isAllEvents ? "No consolidado, cada coluna representa uma semana do mês e a linha azul mostra as publicações no mesmo período comum." : "A etapa selecionada é exibida da primeira à última inscrição; posts fora desse intervalo não entram na comparação."}</p></div></div>
-    {values.length === 0 ? <p className="empty-copy timeline-empty">Não há período em comum entre inscrições e posts neste recorte. Selecione uma etapa para ver toda a sua linha do tempo de inscrições.</p> : <><div className="chart-legend correlation-legend"><span><i className="bar-key" />Inscrições por período</span><span><i className={isAllEvents ? "post-line-key" : "post-key"} />Publicações no Instagram</span>{!isAllEvents && <span><i className="business-day-key" />5º dia útil</span>}<span><i className="lot-deadline-key" />Fim do 1º lote</span><span><i className="line-key" />{formatCorrelation(correlation.correlationWithPosts)}</span></div><div className="timeline-summary"><strong>{formatNumber(event.totalRegistrations)}</strong><span>inscrições no recorte</span><b>{formatNumber(correlation.postCount)} posts no mesmo período</b></div><div className="correlation-timeline" aria-label={`Gráfico de inscrições e posts ${isAllEvents ? "por semana" : "por dia"}`}><div className="correlation-registration-guides" aria-hidden="true">{registrationGuides.guides.map((value) => <div className="correlation-registration-guide" key={value} style={{ bottom: `${(value / registrationGuides.maximum) * 100}%` }}><span>{formatNumber(value)}</span></div>)}</div>{isAllEvents && <svg className="correlation-post-line" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><path d={postLinePath} /></svg>}{values.map((item) => { const markers = references.filter((reference) => reference.date >= item.startDate && reference.date <= item.endDate); return <div className="correlation-day" key={`${item.startDate}-${item.endDate}`} title={`${formatDate(item.startDate)}${item.startDate === item.endDate ? "" : ` a ${formatDate(item.endDate)}`}: ${item.registrations} inscrições e ${item.posts} post(s)`}><span className="correlation-registration-bar" style={{ height: `${Math.max((item.registrations / registrationGuides.maximum) * 100, item.registrations > 0 ? 3 : 0)}%` }} />{markers.map((marker, index) => <i className={`timeline-reference-marker ${marker.kind}`} key={`${marker.kind}-${marker.date}`} style={{ top: `${8 + index * 15}px` }} title={`${marker.label}: ${formatDate(marker.date)}`} />)}{!isAllEvents && item.posts > 0 && <i className="correlation-post-marker" style={{ bottom: `calc(18px + ${Math.max((item.posts / maximumPosts) * 72, 9)}%)` }}><b>{item.posts}</b></i>}<small>{timelineLabel(item, values.length)}</small></div>; })}</div><div className="timeline-caption"><span>{formatDate(correlation.startDate!)}</span><span>{formatDate(correlation.endDate!)}</span></div></>}
+    {values.length === 0 ? <p className="empty-copy timeline-empty">Não há período em comum entre inscrições e posts neste recorte. Selecione uma etapa para ver toda a sua linha do tempo de inscrições.</p> : <>
+      <div className="chart-legend correlation-legend"><span><i className="bar-key" />Inscrições por período</span><span><i className={isAllEvents ? "post-line-key" : "post-key"} />Publicações no Instagram</span>{!isAllEvents && <span><i className="business-day-key" />5º dia útil</span>}<span><i className="lot-deadline-key" />Fim do 1º lote</span><span><i className="line-key" />{formatCorrelation(correlation.correlationWithPosts)}</span></div>
+      <div className="timeline-summary"><strong><AnimatedNumber value={event.totalRegistrations} format={(value) => formatNumber(Math.round(value))} /></strong><span>inscrições no recorte</span><b><AnimatedNumber value={correlation.postCount} format={(value) => formatNumber(Math.round(value))} duration={700} /> posts no mesmo período</b></div>
+      <div className="correlation-timeline" aria-label={`Gráfico de inscrições e posts ${isAllEvents ? "por semana" : "por dia"}`}>
+        <div className="correlation-registration-guides" aria-hidden="true">{registrationGuides.guides.map((value) => <div className="correlation-registration-guide" key={value} style={{ bottom: `${(value / registrationGuides.maximum) * 100}%` }}><span>{formatNumber(value)}</span></div>)}</div>
+        {isAllEvents && <svg className="correlation-post-line" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+          <path pathLength="1" d={postLinePath} />
+          {values.map((item, index) => {
+            if (item.posts === 0) return null;
+            const x = ((index + 0.5) / values.length) * 100;
+            const y = Math.max(4, 100 - (item.posts / maximumPosts) * 92);
+            return <circle className="correlation-post-line-point" cx={x} cy={y} r="1.25" key={`${item.startDate}-post`} style={{ animationDelay: chartAnimationDelay(index, values.length, 420) }} />;
+          })}
+        </svg>}
+        {values.map((item, itemIndex) => {
+          const markers = references.filter((reference) => reference.date >= item.startDate && reference.date <= item.endDate);
+          const barHeight = Math.max((item.registrations / registrationGuides.maximum) * 100, item.registrations > 0 ? 3 : 0);
+          return <div className="correlation-day" key={`${item.startDate}-${item.endDate}`} title={`${formatDate(item.startDate)}${item.startDate === item.endDate ? "" : ` a ${formatDate(item.endDate)}`}: ${item.registrations} inscrições e ${item.posts} post(s)`}>
+            <span className="correlation-registration-bar" style={{ height: `${barHeight}%`, animationDelay: chartAnimationDelay(itemIndex, values.length) }} />
+            {markers.map((marker, index) => <i className={`timeline-reference-marker ${marker.kind}`} key={`${marker.kind}-${marker.date}`} style={{ top: `${8 + index * 15}px` }} title={`${marker.label}: ${formatDate(marker.date)}`} />)}
+            {!isAllEvents && item.posts > 0 && <i className="correlation-post-marker" style={{ bottom: `calc(18px + ${Math.max((item.posts / maximumPosts) * 72, 9)}%)`, animationDelay: chartAnimationDelay(itemIndex, values.length, 360) }}><b>{item.posts}</b></i>}
+            <small>{timelineLabel(item, values.length)}</small>
+          </div>;
+        })}
+      </div>
+      <div className="timeline-caption"><span>{formatDate(correlation.startDate!)}</span><span>{formatDate(correlation.endDate!)}</span></div>
+    </>}
   </section>;
 }
 
@@ -231,12 +297,12 @@ export function AnalyticsOverview({ data, role }: { data: DashboardData; role: "
     <div className="event-filter-row"><button className={activeEventId === "all" ? "active" : ""} type="button" onClick={() => setActiveEventId("all")}>Todos os eventos ({data.events.length})</button>{data.events.map((event) => <button className={activeEventId === event.id ? "active" : ""} type="button" onClick={() => setActiveEventId(event.id)} key={event.id}>{event.name}</button>)}</div>
     <section className="sync-banner"><span>▣</span><strong>{latestImport ? "Sincronizado" : "Sem importações"}</strong><p>{latestImport ? <>Última base: <b>{latestImport.fileName}</b> ({formatNumber(latestImport.sourceRecordCount)} registros processados)</> : "A base de inscrições ainda não possui importações."}</p>{latestImport?.completedAt && <time>{formatDate(latestImport.completedAt.slice(0, 10))}</time>}{canManage ? <Link href="/importacoes"><span className="analytics-glyph upload">↥</span> Importar dados</Link> : <small>Somente visualização</small>}</section>
     <section className="analytics-metrics">
-      <article><span>Total de inscrições</span><div><strong>{formatNumber(activeEvent.totalRegistrations)}</strong><i className="up-pill">{activeEvent.name}</i></div><div className="metric-detail"><span>{formatNumber(activeEvent.confirmedRegistrations)} confirmadas</span><b>{formatNumber(activeEvent.paidRegistrations)} pagas</b></div></article>
-      <article className="correlation-metric"><span>Correlação com posts</span><div><strong>{formatCorrelation(activeCorrelation.correlationWithPosts)}</strong><i className="pearson-pill">Pearson</i></div><div className="metric-detail"><span>{correlationDescription(activeCorrelation.correlationWithPosts)}</span><b>{formatNumber(activeCorrelation.postCount)} posts · engajamento {formatCorrelation(activeCorrelation.correlationWithEngagement)}</b></div></article>
-      <article><span>Engajamento Instagram</span><div><strong className="blue-number">{formatNumber(activeCorrelation.engagement)}</strong><i className="posts-pill">Interações</i></div><div className="metric-detail"><span>{formatNumber(activeCorrelation.reach)} de alcance disponível</span></div></article>
-      <article><span>Receita confirmada</span><div><strong>{formatCurrency(activeEvent.revenue)}</strong><i className="ticket-pill">Pagamentos</i></div><div className="metric-detail"><span>Ticket médio: {formatCurrency(activeEvent.averageTicket)}</span></div></article>
+      <article><span>Total de inscrições</span><div><strong><AnimatedNumber value={activeEvent.totalRegistrations} format={(value) => formatNumber(Math.round(value))} /></strong><i className="up-pill">{activeEvent.name}</i></div><div className="metric-detail"><span><AnimatedNumber value={activeEvent.confirmedRegistrations} format={(value) => formatNumber(Math.round(value))} duration={720} /> confirmadas</span><b><AnimatedNumber value={activeEvent.paidRegistrations} format={(value) => formatNumber(Math.round(value))} duration={720} /> pagas</b></div></article>
+      <article className="correlation-metric"><span>Correlação com posts</span><div><strong><AnimatedCorrelation value={activeCorrelation.correlationWithPosts} /></strong><i className="pearson-pill">Pearson</i></div><div className="metric-detail"><span>{correlationDescription(activeCorrelation.correlationWithPosts)}</span><b><AnimatedNumber value={activeCorrelation.postCount} format={(value) => formatNumber(Math.round(value))} duration={700} /> posts · engajamento <AnimatedCorrelation value={activeCorrelation.correlationWithEngagement} /></b></div></article>
+      <article><span>Engajamento Instagram</span><div><strong className="blue-number"><AnimatedNumber value={activeCorrelation.engagement} format={(value) => formatNumber(Math.round(value))} /></strong><i className="posts-pill">Interações</i></div><div className="metric-detail"><span><AnimatedNumber value={activeCorrelation.reach} format={(value) => formatNumber(Math.round(value))} duration={800} /> de alcance disponível</span></div></article>
+      <article><span>Receita confirmada</span><div><strong><AnimatedNumber value={activeEvent.revenue} format={formatCurrency} /></strong><i className="ticket-pill">Pagamentos</i></div><div className="metric-detail"><span>Ticket médio: <AnimatedNumber value={activeEvent.averageTicket} format={formatCurrency} duration={750} /></span></div></article>
     </section>
-    <CorrelationTimeline event={activeEvent} correlation={activeCorrelation} lotDeadlines={lotDeadlines} />
+    <CorrelationTimeline key={activeEvent.id} event={activeEvent} correlation={activeCorrelation} lotDeadlines={lotDeadlines} />
     <section className="analytics-data-grid">
       <Breakdown title="Faixas etárias" items={activeEvent.ageRanges} emptyText="Não há datas de nascimento suficientes para gerar faixas etárias." />
       <Breakdown title="Inscrições por lote" items={activeEvent.lots} emptyText="Nenhum lote foi informado na base." />

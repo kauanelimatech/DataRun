@@ -1,5 +1,6 @@
 import { getApiUserAccess, isAdministrator } from "@/lib/auth/access";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { revalidatePath } from "next/cache";
 
 export const dynamic = "force-dynamic";
 
@@ -42,14 +43,16 @@ export async function PATCH(request: Request) {
       return jsonError("Uma das categorias escolhidas não está disponível.", 400);
     }
 
+    const timestamp = new Date().toISOString();
     const { error: rejectPreviousError } = await admin
       .from("instagram_post_categories")
-      .update({ review_status: "rejected", updated_at: new Date().toISOString() })
+      .update({ review_status: "rejected", updated_at: timestamp })
       .eq("post_id", body.postId)
+      .neq("category_id", uniqueCategoryIds[0])
       .in("review_status", ["suggested", "confirmed"]);
     if (rejectPreviousError) return jsonError("Não foi possível atualizar as sugestões anteriores.", 500);
 
-    const { error: saveCategoriesError } = await admin
+    const { data: savedCategory, error: saveCategoriesError } = await admin
       .from("instagram_post_categories")
       .upsert(uniqueCategoryIds.map((categoryId) => ({
         post_id: body.postId,
@@ -57,11 +60,33 @@ export async function PATCH(request: Request) {
         source: "manual",
         confidence: null,
         review_status: "confirmed",
-        updated_at: new Date().toISOString(),
-      })), { onConflict: "post_id,category_id" });
-    if (saveCategoriesError) return jsonError("Não foi possível confirmar as categorias escolhidas.", 500);
+        updated_at: timestamp,
+      })), { onConflict: "post_id,category_id" })
+      .select("post_id, category_id, review_status")
+      .single();
+    if (saveCategoriesError || !savedCategory || savedCategory.review_status !== "confirmed") {
+      return jsonError("Não foi possível confirmar a categoria no banco de dados.", 500);
+    }
 
-    return Response.json({ status: "confirmed", categoryCount: uniqueCategoryIds.length });
+    // Read the persisted state before responding. The client only removes a post
+    // from "Sem categoria" after this verification succeeds.
+    const { data: confirmedCategories, error: confirmationError } = await admin
+      .from("instagram_post_categories")
+      .select("category_id")
+      .eq("post_id", body.postId)
+      .eq("review_status", "confirmed");
+    const confirmedCategoryIds = (confirmedCategories ?? []).map((category) => category.category_id);
+    if (confirmationError || confirmedCategoryIds.length !== 1 || confirmedCategoryIds[0] !== uniqueCategoryIds[0]) {
+      return jsonError("A categoria não pôde ser confirmada no banco de dados. Nenhuma alteração foi considerada concluída.", 500);
+    }
+
+    revalidatePath("/divulgacao");
+    return Response.json({
+      status: "confirmed",
+      categoryCount: uniqueCategoryIds.length,
+      postId: body.postId,
+      categoryId: uniqueCategoryIds[0],
+    }, { headers: { "Cache-Control": "no-store" } });
   }
 
   const { error } = await admin
@@ -71,5 +96,6 @@ export async function PATCH(request: Request) {
     .eq("review_status", "suggested");
   if (error) return jsonError("Não foi possível rejeitar as sugestões.", 500);
 
+  revalidatePath("/divulgacao");
   return Response.json({ status: "rejected" });
 }

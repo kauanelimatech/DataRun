@@ -52,6 +52,7 @@ export function InstagramCategoryManagement({ categories, reviewCategories, uncl
   const [selectedCategories, setSelectedCategories] = useState<Record<string, string>>({});
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
 
   async function loadPosts(category: ActiveCategory, offset = 0, append = false) {
     setIsLoading(true);
@@ -81,6 +82,7 @@ export function InstagramCategoryManagement({ categories, reviewCategories, uncl
     setPosts([]);
     setTotal(0);
     setNextOffset(null);
+    setNotice("");
     void loadPosts(category);
   }
 
@@ -95,19 +97,28 @@ export function InstagramCategoryManagement({ categories, reviewCategories, uncl
 
     setProcessingId(post.postId);
     setError("");
+    setNotice("");
     try {
       const response = await fetch("/api/integrations/instagram/categories/review", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ postId: post.postId, action: "confirm", categoryIds: [categoryId] }),
       });
-      const payload = await response.json().catch(() => null) as { error?: string } | null;
+      const payload = await response.json().catch(() => null) as { error?: string; postId?: string; categoryId?: string; status?: string } | null;
       if (!response.ok) throw new Error(payload?.error || "Não foi possível salvar a categoria.");
-
-      if (activeCategory.isUnclassified || categoryId !== activeCategory.id) {
-        setPosts((current) => current.filter((currentPost) => currentPost.postId !== post.postId));
-        setTotal((current) => Math.max(0, current - 1));
+      if (payload?.status !== "confirmed" || payload.postId !== post.postId || payload.categoryId !== categoryId) {
+        throw new Error("O servidor não confirmou a gravação da categoria.");
       }
+
+      setSelectedCategories((current) => {
+        const next = { ...current };
+        delete next[post.postId];
+        return next;
+      });
+      await loadPosts(activeCategory);
+      setNotice(activeCategory.isUnclassified || categoryId !== activeCategory.id
+        ? "Categoria salva e verificada. O post foi movido para a nova classificação."
+        : "Categoria salva e verificada no banco de dados.");
       router.refresh();
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "Não foi possível salvar a categoria.");
@@ -131,6 +142,7 @@ export function InstagramCategoryManagement({ categories, reviewCategories, uncl
     {activeCategory && <section className="instagram-review-panel category-posts-panel">
       <div className="review-heading"><div><p className="section-kicker">Conferência por categoria</p><h2>{activeCategory.name}</h2><p>{isLoading && posts.length === 0 ? "Carregando posts…" : `${total.toLocaleString("pt-BR")} post(s) nesta lista. Escolha uma única tag e salve para mover a publicação automaticamente.`}</p></div><button className="outline-button" type="button" onClick={() => { setActiveCategory(null); setPosts([]); setError(""); }}>Fechar lista</button></div>
       {error && <p className="review-error">{error}</p>}
+      {notice && <p className="review-success">{notice}</p>}
       {!isLoading && posts.length === 0 && !error && <p className="empty-copy">Nenhum post nesta categoria.</p>}
       <div className="review-list">
         {posts.map((post) => {

@@ -11,6 +11,39 @@ function isUuid(value: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
+function isDate(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+}
+
+export async function PATCH(request: Request, { params }: { params: Promise<{ eventId: string }> }) {
+  const access = await getApiUserAccess();
+  if (!access) return jsonError("Faça login para atualizar um evento.", 401);
+  if (!isAdministrator(access)) return jsonError("Somente administradores podem atualizar eventos.", 403);
+
+  const { eventId } = await params;
+  if (!isUuid(eventId)) return jsonError("O evento informado não é válido.", 400);
+
+  const body = await request.json().catch(() => null) as { firstLotEndsOn?: unknown } | null;
+  const firstLotEndsOn = typeof body?.firstLotEndsOn === "string" ? body.firstLotEndsOn.trim() : "";
+  if (firstLotEndsOn && !isDate(firstLotEndsOn)) {
+    return jsonError("Informe uma data válida para o encerramento do primeiro lote.", 400);
+  }
+
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("events")
+    .update({ first_lot_ends_on: firstLotEndsOn || null })
+    .eq("id", eventId)
+    .select("id, first_lot_ends_on")
+    .maybeSingle();
+  if (error) return jsonError("Não foi possível atualizar a data do primeiro lote.", 500);
+  if (!data) return jsonError("Este evento não foi encontrado.", 404);
+
+  return Response.json({ eventId: data.id, firstLotEndsOn: data.first_lot_ends_on });
+}
+
 export async function DELETE(_request: Request, { params }: { params: Promise<{ eventId: string }> }) {
   const access = await getApiUserAccess();
   if (!access) return jsonError("Faça login para excluir um evento.", 401);

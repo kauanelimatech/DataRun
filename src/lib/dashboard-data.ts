@@ -10,6 +10,7 @@ type EventRow = {
   edition_year: number;
   source_stage: string | null;
   event_date: string | null;
+  first_lot_ends_on: string | null;
 };
 
 type RegistrationRow = {
@@ -140,6 +141,7 @@ export type DashboardEvent = {
   year: number;
   stage: string | null;
   eventDate: string | null;
+  firstLotEndsOn: string | null;
   totalRegistrations: number;
   confirmedRegistrations: number;
   paidRegistrations: number;
@@ -427,7 +429,7 @@ function buildCorrelation(records: RegistrationRow[], socialPosts: SocialPost[],
 export async function getDashboardData(): Promise<DashboardData> {
   const admin = createAdminClient();
   const [{ data: eventRows, error: eventError }, registrationRows, { data: importRows, error: importError }, socialPosts] = await Promise.all([
-    admin.from("events").select("id, name, edition_year, source_stage, event_date").order("edition_year", { ascending: false }).order("name"),
+    admin.from("events").select("id, name, edition_year, source_stage, event_date, first_lot_ends_on").order("edition_year", { ascending: false }).order("name"),
     fetchAllRegistrations(),
     admin.from("registration_imports").select("id, source_file_name, status, source_record_count, inserted_record_count, updated_record_count, completed_at, created_at").order("created_at", { ascending: false }).limit(8),
     fetchSocialPosts(),
@@ -453,6 +455,7 @@ export async function getDashboardData(): Promise<DashboardData> {
       year: event.edition_year,
       stage: event.source_stage,
       eventDate: event.event_date,
+      firstLotEndsOn: event.first_lot_ends_on,
       totalRegistrations: records.length,
       confirmedRegistrations: records.filter(isConfirmed).length,
       paidRegistrations: paidAndConfirmed.length,
@@ -510,6 +513,7 @@ export function combineEvents(events: DashboardEvent[]): DashboardEvent {
     year: 0,
     stage: null,
     eventDate: null,
+    firstLotEndsOn: null,
     totalRegistrations,
     confirmedRegistrations,
     paidRegistrations,

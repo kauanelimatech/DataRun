@@ -25,8 +25,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ ev
   const { eventId } = await params;
   if (!isUuid(eventId)) return jsonError("O evento informado não é válido.", 400);
 
-  const body = await request.json().catch(() => null) as { firstLotEndsOn?: unknown } | null;
+  const body = await request.json().catch(() => null) as { eventDate?: unknown; firstLotEndsOn?: unknown } | null;
+  const eventDate = typeof body?.eventDate === "string" ? body.eventDate.trim() : "";
   const firstLotEndsOn = typeof body?.firstLotEndsOn === "string" ? body.firstLotEndsOn.trim() : "";
+  if (eventDate && !isDate(eventDate)) {
+    return jsonError("Informe uma data válida para o evento.", 400);
+  }
   if (firstLotEndsOn && !isDate(firstLotEndsOn)) {
     return jsonError("Informe uma data válida para o encerramento do primeiro lote.", 400);
   }
@@ -34,14 +38,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ ev
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("events")
-    .update({ first_lot_ends_on: firstLotEndsOn || null })
+    .update({ event_date: eventDate || null, first_lot_ends_on: firstLotEndsOn || null })
     .eq("id", eventId)
-    .select("id, first_lot_ends_on")
+    .select("id, event_date, first_lot_ends_on")
     .maybeSingle();
-  if (error) return jsonError("Não foi possível atualizar a data do primeiro lote.", 500);
+  if (error) return jsonError("Não foi possível atualizar as datas do evento.", 500);
   if (!data) return jsonError("Este evento não foi encontrado.", 404);
 
-  return Response.json({ eventId: data.id, firstLotEndsOn: data.first_lot_ends_on });
+  return Response.json({ eventId: data.id, eventDate: data.event_date, firstLotEndsOn: data.first_lot_ends_on });
 }
 
 export async function DELETE(_request: Request, { params }: { params: Promise<{ eventId: string }> }) {

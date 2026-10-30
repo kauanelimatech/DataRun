@@ -22,7 +22,7 @@ type NavItem = {
 
 const navItems: NavItem[] = [
   { href: "/", label: "Visão Geral & Correlação", icon: "grid" },
-  { href: "/eventos", label: "Eventos & Lotes", icon: "ticket" },
+  { href: "/eventos", label: "Eventos", icon: "calendarCheck" },
   { href: "/divulgacao", label: "Posts do Instagram", icon: "megaphone" },
   { href: "/inscricoes", label: "Inscrições", icon: "ticket" },
   { href: "/relatorios", label: "Relatórios", icon: "chart" },
@@ -43,6 +43,7 @@ function Icon({ name, size = 18 }: { name: string; size?: number }) {
     ticket: <><path d="M4 5h16v5a2 2 0 0 0 0 4v5H4v-5a2 2 0 0 0 0-4Z" /><path d="M13 5v14" /></>,
     upload: <><path d="M12 16V3" /><path d="m7 8 5-5 5 5" /><path d="M5 14v6h14v-6" /></>,
     calendar: <><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M16 3v4M8 3v4M3 10h18" /></>,
+    calendarCheck: <><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M16 3v4M8 3v4M3 10h18" /><path d="m8 16 2.5 2.5L16 13" /></>,
     settings: <><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.6 1.6 0 0 0 .32 1.77l.06.06-2.12 2.12-.06-.06a1.6 1.6 0 0 0-1.77-.32 1.6 1.6 0 0 0-.97 1.46V20h-3v-.08a1.6 1.6 0 0 0-.97-1.46 1.6 1.6 0 0 0-1.77.32l-.06.06-2.12-2.12.06-.06A1.6 1.6 0 0 0 7.32 15a1.6 1.6 0 0 0-1.46-.97H5.8v-3h.08a1.6 1.6 0 0 0 1.46-.97 1.6 1.6 0 0 0-.32-1.77l-.06-.06 2.12-2.12.06.06a1.6 1.6 0 0 0 1.77.32h.02a1.6 1.6 0 0 0 .95-1.46V5h3v.08a1.6 1.6 0 0 0 .97 1.46 1.6 1.6 0 0 0 1.77-.32l.06-.06 2.12 2.12-.06.06a1.6 1.6 0 0 0-.32 1.77v.02a1.6 1.6 0 0 0 1.46.95H20v3h-.08A1.6 1.6 0 0 0 19.4 15Z" /></>,
     menu: <><path d="M4 7h16M4 12h16M4 17h16" /></>,
     bell: <><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" /><path d="M10 21h4" /></>,

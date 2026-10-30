@@ -75,11 +75,7 @@ export function DashboardShell({ title, description, children, socialConnectionS
   const pathname = usePathname();
   const router = useRouter();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [selectedScope, setSelectedScope] = useState("Todos os eventos");
-  const [selectedPeriod, setSelectedPeriod] = useState("Todo o período");
   const [selectedRange, setSelectedRange] = useState("Todo o período");
-  const [isScopeOpen, setIsScopeOpen] = useState(false);
-  const [isPeriodOpen, setIsPeriodOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [signOutError, setSignOutError] = useState("");
@@ -139,16 +135,6 @@ export function DashboardShell({ title, description, children, socialConnectionS
       <div className="workspace">
         <header className="topbar">
           <button className="menu-button" type="button" onClick={() => setIsMenuOpen(true)} aria-label="Abrir menu"><Icon name="menu" /></button>
-          <div className="header-filters">
-            <div className="filter-menu">
-              <button className="header-select" type="button" onClick={() => { setIsScopeOpen(!isScopeOpen); setIsPeriodOpen(false); }}><Icon name="calendar" size={15} /><span>{selectedScope}</span><b>⌄</b></button>
-              {isScopeOpen && <div className="filter-popover">{["Todos os eventos"].map((scope) => <button type="button" key={scope} onClick={() => { setSelectedScope(scope); setIsScopeOpen(false); }}>{scope}</button>)}</div>}
-            </div>
-            <div className="filter-menu period-menu">
-              <button className="header-select" type="button" onClick={() => { setIsPeriodOpen(!isPeriodOpen); setIsScopeOpen(false); }}><Icon name="calendar" size={15} /><span>{selectedPeriod}</span><b>⌄</b></button>
-              {isPeriodOpen && <div className="filter-popover">{["Todo o período"].map((period) => <button type="button" key={period} onClick={() => { setSelectedPeriod(period); setIsPeriodOpen(false); }}>{period}</button>)}</div>}
-            </div>
-          </div>
           <div className="topbar-actions">
             {isAdministrator && <Link className="header-import" href="/importacoes"><Icon name="upload" size={15} /> Importar dados</Link>}
             <div className="notification-wrap"><button className="notification-button" type="button" aria-label="Notificações" onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}><Icon name="bell" /><span /></button>{isNotificationsOpen && <div className="notification-popover"><strong>Atualizações</strong><p>Os indicadores são atualizados após cada importação concluída.</p></div>}</div>

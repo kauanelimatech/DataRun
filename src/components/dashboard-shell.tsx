@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { ReactNode, useState } from "react";
 import { SocialConnectionStatus } from "@/components/social-connection-status";
+import { createClient } from "@/lib/supabase/client";
 
 type DashboardShellProps = {
   title: string;
@@ -47,6 +48,7 @@ function Icon({ name, size = 18 }: { name: string; size?: number }) {
     bell: <><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" /><path d="M10 21h4" /></>,
     chevron: <path d="m9 18 6-6-6-6" />,
     close: <><path d="m6 6 12 12M18 6 6 18" /></>,
+    logout: <><path d="M10 5H5v14h5" /><path d="m14 8 4 4-4 4" /><path d="M18 12H9" /></>,
     users: <><circle cx="9" cy="8" r="3" /><circle cx="17" cy="9" r="2.3" /><path d="M3.5 20c.5-3.1 2.6-5 5.5-5s5 1.9 5.5 5" /><path d="M14.5 15.8c2.1.4 3.5 1.8 3.9 4.2" /></>,
   };
 
@@ -71,6 +73,7 @@ function Navigation({ items, pathname, onNavigate }: { items: NavItem[]; pathnam
 
 export function DashboardShell({ title, description, children, socialConnectionStatus, role }: DashboardShellProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [selectedScope, setSelectedScope] = useState("Todos os eventos");
   const [selectedPeriod, setSelectedPeriod] = useState("Todo o período");
@@ -78,9 +81,27 @@ export function DashboardShell({ title, description, children, socialConnectionS
   const [isScopeOpen, setIsScopeOpen] = useState(false);
   const [isPeriodOpen, setIsPeriodOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [isSigningOut, setIsSigningOut] = useState(false);
+  const [signOutError, setSignOutError] = useState("");
 
   const closeMenu = () => setIsMenuOpen(false);
   const isAdministrator = role === "ADMINISTRATOR";
+
+  async function signOut() {
+    setIsSigningOut(true);
+    setSignOutError("");
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.auth.signOut({ scope: "local" });
+      if (error) throw error;
+      closeMenu();
+      router.replace("/login");
+      router.refresh();
+    } catch {
+      setSignOutError("Não foi possível encerrar sua sessão. Tente novamente.");
+      setIsSigningOut(false);
+    }
+  }
 
   return (
     <div className="app-shell">
@@ -110,6 +131,8 @@ export function DashboardShell({ title, description, children, socialConnectionS
             <div><span>Base de inscrições</span><b>Conectada</b></div>
             <div><span>Dados sociais</span><SocialConnectionStatus initialStatus={socialConnectionStatus} /></div>
           </div>
+          <button className="sidebar-logout" type="button" onClick={signOut} disabled={isSigningOut}><Icon name="logout" size={16} />{isSigningOut ? "Saindo…" : "Sair do painel"}</button>
+          {signOutError && <p className="sidebar-logout-error" role="alert">{signOutError}</p>}
         </div>
       </aside>
 

@@ -96,20 +96,45 @@ export type InstagramCategorizedPost = {
   mediaType: string;
 };
 
+const SUPABASE_PAGE_SIZE = 1_000;
+
+/**
+ * PostgREST limits an individual response to its configured maximum (1,000
+ * rows here). A post can keep rejected/suggested assignments as history, so
+ * the category table can be larger than the number of Instagram posts.
+ */
+async function getAllPostCategoryRows(): Promise<PostCategoryRow[]> {
+  const admin = createAdminClient();
+  const assignments: PostCategoryRow[] = [];
+
+  for (let offset = 0; ; offset += SUPABASE_PAGE_SIZE) {
+    const { data, error } = await admin
+      .from("instagram_post_categories")
+      .select("post_id, category_id, review_status")
+      .order("post_id", { ascending: true })
+      .order("category_id", { ascending: true })
+      .range(offset, offset + SUPABASE_PAGE_SIZE - 1);
+    if (error) throw new Error("Não foi possível carregar as classificações de conteúdo do Instagram.");
+
+    const page = (data ?? []) as PostCategoryRow[];
+    assignments.push(...page);
+    if (page.length < SUPABASE_PAGE_SIZE) return assignments;
+  }
+}
+
 export async function getInstagramContentSummary(): Promise<InstagramContentSummary> {
   const admin = createAdminClient();
-  const [{ data: categories, error: categoriesError }, { data: postCategories, error: postCategoriesError }, { count: postCount, error: postsError }, { data: connection, error: connectionError }] = await Promise.all([
+  const [assignments, { data: categories, error: categoriesError }, { count: postCount, error: postsError }, { data: connection, error: connectionError }] = await Promise.all([
+    getAllPostCategoryRows(),
     admin.from("content_categories").select("id, slug, name, display_order").eq("is_active", true).order("display_order"),
-    admin.from("instagram_post_categories").select("post_id, category_id, review_status"),
     admin.from("instagram_posts").select("id", { count: "exact", head: true }),
     admin.from("instagram_connections").select("instagram_username, status, last_synced_at").order("connected_at", { ascending: false }).limit(1).maybeSingle(),
   ]);
 
-  if (categoriesError || postCategoriesError || postsError || connectionError) {
+  if (categoriesError || postsError || connectionError) {
     throw new Error("Não foi possível carregar a taxonomia de conteúdo do Instagram.");
   }
 
-  const assignments = (postCategories ?? []) as PostCategoryRow[];
   const classifiedPostIds = new Set(assignments.filter((assignment) => assignment.review_status === "confirmed").map((assignment) => assignment.post_id));
   const summaries = ((categories ?? []) as CategoryRow[]).map((category) => ({
     id: category.id,
@@ -158,6 +183,24 @@ type PostRow = {
   media_type: string;
 };
 
+async function getAllInstagramPosts(): Promise<PostRow[]> {
+  const admin = createAdminClient();
+  const posts: PostRow[] = [];
+
+  for (let offset = 0; ; offset += SUPABASE_PAGE_SIZE) {
+    const { data, error } = await admin
+      .from("instagram_posts")
+      .select("id, caption, permalink, published_at, media_type")
+      .order("published_at", { ascending: false })
+      .range(offset, offset + SUPABASE_PAGE_SIZE - 1);
+    if (error) throw new Error("Não foi possível carregar os posts do Instagram.");
+
+    const page = (data ?? []) as PostRow[];
+    posts.push(...page);
+    if (page.length < SUPABASE_PAGE_SIZE) return posts;
+  }
+}
+
 function toCategorizedPost(post: PostRow): InstagramCategorizedPost {
   return {
     postId: post.id,
@@ -174,14 +217,15 @@ export async function getInstagramPostsForCategory(categoryId: string | "unclass
   const safeLimit = Math.min(60, Math.max(1, limit));
 
   if (categoryId === "unclassified") {
-    const [{ data: confirmedAssignments, error: confirmedError }, { data: posts, error: postsError }] = await Promise.all([
-      admin.from("instagram_post_categories").select("post_id").eq("review_status", "confirmed"),
-      admin.from("instagram_posts").select("id, caption, permalink, published_at, media_type").order("published_at", { ascending: false }),
+    const [assignments, posts] = await Promise.all([
+      getAllPostCategoryRows(),
+      getAllInstagramPosts(),
     ]);
-    if (confirmedError || postsError) throw new Error("Não foi possível carregar os posts sem categoria.");
 
-    const confirmedPostIds = new Set((confirmedAssignments ?? []).map((assignment) => String(assignment.post_id)));
-    const unclassifiedPosts = ((posts ?? []) as PostRow[]).filter((post) => !confirmedPostIds.has(post.id));
+    const confirmedPostIds = new Set(assignments
+      .filter((assignment) => assignment.review_status === "confirmed")
+      .map((assignment) => assignment.post_id));
+    const unclassifiedPosts = posts.filter((post) => !confirmedPostIds.has(post.id));
     return {
       posts: unclassifiedPosts.slice(safeOffset, safeOffset + safeLimit).map(toCategorizedPost),
       total: unclassifiedPosts.length,

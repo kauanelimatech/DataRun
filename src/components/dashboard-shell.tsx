@@ -24,7 +24,7 @@ const navItems: NavItem[] = [
   { href: "/", label: "Visão Geral & Correlação", icon: "grid" },
   { href: "/eventos", label: "Eventos & Lotes", icon: "ticket" },
   { href: "/divulgacao", label: "Posts do Instagram", icon: "megaphone" },
-  { href: "/inscricoes", label: "Inscrições", icon: "chart" },
+  { href: "/inscricoes", label: "Inscrições", icon: "ticket" },
   { href: "/relatorios", label: "Relatórios", icon: "chart" },
 ];
 

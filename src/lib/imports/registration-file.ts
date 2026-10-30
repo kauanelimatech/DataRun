@@ -211,15 +211,22 @@ function parseBoolean(value: unknown) {
   return false;
 }
 
-function parseId(value: unknown) {
+function parseSourceIdentifier(value: unknown) {
   const raw = text(value);
-  if (!raw || !/^\d+(?:\.0+)?$/.test(raw)) return null;
-  const id = raw.replace(/\.0+$/, "");
-  try {
-    return BigInt(id) > BigInt(0) ? id : null;
-  } catch {
-    return null;
+  if (!raw || raw.length > 120) return null;
+
+  // Spreadsheet programs frequently render numeric identifiers with a .0
+  // suffix. Preserve the former canonical value so existing registrations
+  // continue to resolve to the same HMAC fingerprint on re-import.
+  if (/^\d+(?:\.0+)?$/.test(raw)) {
+    const normalized = raw.replace(/\.0+$/, "");
+    return /^0+$/.test(normalized) ? null : normalized;
   }
+
+  // Some registration platforms use codes such as DOI-9999. These stable
+  // source identifiers are hashed before persistence and may not contain
+  // whitespace or unstructured personal data.
+  return /^[A-Za-z0-9][A-Za-z0-9._/-]*$/.test(raw) ? raw : null;
 }
 
 function ageRangeFromBirthDate(birthDate: string | null, referenceDate: string) {
@@ -292,7 +299,7 @@ export function parseRegistrationFile(buffer: Buffer): RegistrationFileParseResu
 
     const sourceYear = Number(text(cell(row, "ano")));
     const sourceStage = text(cell(row, "etapa_origem"));
-    const externalRegistrationId = parseId(cell(row, "id_inscricao"));
+    const externalRegistrationId = parseSourceIdentifier(cell(row, "id_inscricao"));
     const registeredOn = parseDate(cell(row, "data_inscricao"));
     const finalAmount = parseMoney(cell(row, "valor_final"));
     const registrationStatus = text(cell(row, "situacao_inscricao"));
@@ -301,7 +308,7 @@ export function parseRegistrationFile(buffer: Buffer): RegistrationFileParseResu
 
     if (!Number.isInteger(sourceYear) || sourceYear < 2000 || sourceYear > 2100) rowIssues.push({ row: rowNumber, field: "ano", message: "Informe um ano entre 2000 e 2100." });
     if (!sourceStage) rowIssues.push({ row: rowNumber, field: "etapa_origem", message: "Informe a etapa de origem." });
-    if (!externalRegistrationId) rowIssues.push({ row: rowNumber, field: "id_inscricao", message: "Informe um identificador de inscrição numérico positivo." });
+    if (!externalRegistrationId) rowIssues.push({ row: rowNumber, field: "id_inscricao", message: "Informe um identificador de inscrição válido, como 123456 ou DOI-9999." });
     if (!registeredOn) rowIssues.push({ row: rowNumber, field: "data_inscricao", message: "Use uma data válida, como 14/10/2026." });
     if (finalAmount === null || finalAmount < 0) rowIssues.push({ row: rowNumber, field: "valor_final", message: "Informe um valor final igual ou maior que zero." });
     if (!registrationStatus) rowIssues.push({ row: rowNumber, field: "situacao_inscricao", message: "Informe a situação da inscrição." });
@@ -324,7 +331,7 @@ export function parseRegistrationFile(buffer: Buffer): RegistrationFileParseResu
       sourceYear,
       sourceStage: sourceStage!,
       externalRegistrationId: externalRegistrationId!,
-      externalPurchaseId: parseId(cell(row, "id_compra")),
+      externalPurchaseId: parseSourceIdentifier(cell(row, "id_compra")),
       lotName: text(cell(row, "lote")),
       kitName: text(cell(row, "kit")),
       listPrice: listPrice !== null && listPrice >= 0 ? listPrice : null,

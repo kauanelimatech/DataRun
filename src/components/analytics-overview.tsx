@@ -52,14 +52,56 @@ function Breakdown({ title, items, emptyText }: { title: string; items: ValueBre
   return <article className="analytics-data-panel"><h2>{title}</h2>{items.length === 0 ? <p className="empty-copy">{emptyText}</p> : <div className="breakdown-list">{items.slice(0, 7).map((item) => <div key={item.label}><span>{item.label}</span><i><b style={{ width: `${total === 0 ? 0 : (item.value / total) * 100}%` }} /></i><strong>{formatNumber(item.value)}</strong></div>)}</div>}</article>;
 }
 
+type TimelineDisplayPoint = {
+  startDate: string;
+  endDate: string;
+  registrations: number;
+  posts: number;
+};
+
+function timelinePoints(values: DashboardCorrelation["daily"]): TimelineDisplayPoint[] {
+  if (values.length <= 90) return values.map((value) => ({ ...value, startDate: value.date, endDate: value.date }));
+
+  if (values.length <= 730) {
+    const points: TimelineDisplayPoint[] = [];
+    for (let index = 0; index < values.length; index += 7) {
+      const group = values.slice(index, index + 7);
+      points.push({
+        startDate: group[0].date,
+        endDate: group.at(-1)!.date,
+        registrations: group.reduce((total, value) => total + value.registrations, 0),
+        posts: group.reduce((total, value) => total + value.posts, 0),
+      });
+    }
+    return points;
+  }
+
+  const monthly = new Map<string, TimelineDisplayPoint>();
+  values.forEach((value) => {
+    const key = value.date.slice(0, 7);
+    const current = monthly.get(key) ?? { startDate: value.date, endDate: value.date, registrations: 0, posts: 0 };
+    current.endDate = value.date;
+    current.registrations += value.registrations;
+    current.posts += value.posts;
+    monthly.set(key, current);
+  });
+  return Array.from(monthly.values());
+}
+
+function timelineLabel(point: TimelineDisplayPoint, numberOfPoints: number) {
+  if (numberOfPoints > 40) return "";
+  return new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: numberOfPoints > 16 ? "short" : undefined, timeZone: "UTC" }).format(new Date(`${point.startDate}T00:00:00Z`));
+}
+
 function CorrelationTimeline({ event, correlation }: { event: DashboardEvent; correlation: DashboardCorrelation }) {
-  const values = correlation.daily.slice(-31);
+  const values = timelinePoints(correlation.daily);
   const maximumRegistrations = Math.max(...values.map((item) => item.registrations), 1);
   const maximumPosts = Math.max(...values.map((item) => item.posts), 1);
+  const isAllEvents = event.id === "all";
 
   return <section className="correlation-panel registration-timeline-panel">
-    <div className="correlation-header"><div><h2><span className="analytics-glyph chart">↗</span> Inscrições diárias × publicações do Instagram</h2><p>Comparação temporal no período de inscrições da etapa selecionada. Publicações não representam conversões atribuídas individualmente.</p></div></div>
-    {!correlation.hasComparablePeriod ? <p className="empty-copy timeline-empty">Não há posts publicados dentro do período de inscrições deste recorte. A correlação aparecerá quando as duas fontes tiverem datas em comum.</p> : <><div className="chart-legend correlation-legend"><span><i className="bar-key" />Inscrições por dia</span><span><i className="post-key" />Publicações no Instagram</span><span><i className="line-key" />{formatCorrelation(correlation.correlationWithPosts)}</span></div><div className="timeline-summary"><strong>{formatNumber(event.totalRegistrations)}</strong><span>inscrições no recorte</span><b>{formatNumber(correlation.postCount)} posts no mesmo período</b></div><div className="correlation-timeline" aria-label="Gráfico de inscrições e posts por dia">{values.map((item) => <div className="correlation-day" key={item.date} title={`${formatDate(item.date)}: ${item.registrations} inscrições e ${item.posts} post(s)`}><span className="correlation-registration-bar" style={{ height: `${Math.max((item.registrations / maximumRegistrations) * 100, item.registrations > 0 ? 3 : 0)}%` }} />{item.posts > 0 && <i className="correlation-post-marker" style={{ bottom: `calc(18px + ${Math.max((item.posts / maximumPosts) * 72, 9)}%)` }}><b>{item.posts}</b></i>}<small>{new Date(`${item.date}T00:00:00Z`).getUTCDate()}</small></div>)}</div><div className="timeline-caption"><span>{formatDate(values[0].date)}</span><span>{formatDate(values.at(-1)!.date)}</span></div></>}
+    <div className="correlation-header"><div><h2><span className="analytics-glyph chart">↗</span> Inscrições diárias × publicações do Instagram</h2><p>{isAllEvents ? "No consolidado, o gráfico usa somente o período em comum entre a primeira e a última inscrição e o primeiro e o último post." : "A etapa selecionada é exibida da primeira à última inscrição; posts fora desse intervalo não entram na comparação."}</p></div></div>
+    {values.length === 0 ? <p className="empty-copy timeline-empty">Não há período em comum entre inscrições e posts neste recorte. Selecione uma etapa para ver toda a sua linha do tempo de inscrições.</p> : <><div className="chart-legend correlation-legend"><span><i className="bar-key" />Inscrições por período</span><span><i className="post-key" />Publicações no Instagram</span><span><i className="line-key" />{formatCorrelation(correlation.correlationWithPosts)}</span></div><div className="timeline-summary"><strong>{formatNumber(event.totalRegistrations)}</strong><span>inscrições no recorte</span><b>{formatNumber(correlation.postCount)} posts no mesmo período</b></div><div className="correlation-timeline" aria-label="Gráfico de inscrições e posts por período">{values.map((item) => <div className="correlation-day" key={`${item.startDate}-${item.endDate}`} title={`${formatDate(item.startDate)}${item.startDate === item.endDate ? "" : ` a ${formatDate(item.endDate)}`}: ${item.registrations} inscrições e ${item.posts} post(s)`}><span className="correlation-registration-bar" style={{ height: `${Math.max((item.registrations / maximumRegistrations) * 100, item.registrations > 0 ? 3 : 0)}%` }} />{item.posts > 0 && <i className="correlation-post-marker" style={{ bottom: `calc(18px + ${Math.max((item.posts / maximumPosts) * 72, 9)}%)` }}><b>{item.posts}</b></i>}<small>{timelineLabel(item, values.length)}</small></div>)}</div><div className="timeline-caption"><span>{formatDate(correlation.startDate!)}</span><span>{formatDate(correlation.endDate!)}</span></div></>}
   </section>;
 }
 

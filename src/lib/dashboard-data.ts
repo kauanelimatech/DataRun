@@ -341,12 +341,20 @@ function emptyCorrelation(): DashboardCorrelation {
   };
 }
 
-function buildCorrelation(records: RegistrationRow[], socialPosts: SocialPost[]): DashboardCorrelation {
+function buildCorrelation(records: RegistrationRow[], socialPosts: SocialPost[], range: "registrations" | "overlap" = "registrations"): DashboardCorrelation {
   const registrations = daily(records);
   if (registrations.length === 0) return emptyCorrelation();
 
-  const startDate = registrations[0].date;
-  const endDate = registrations.at(-1)!.date;
+  let startDate = registrations[0].date;
+  let endDate = registrations.at(-1)!.date;
+  if (range === "overlap") {
+    if (socialPosts.length === 0) return emptyCorrelation();
+    const postDates = socialPosts.map((post) => post.publishedDate).sort();
+    startDate = startDate > postDates[0] ? startDate : postDates[0];
+    endDate = endDate < postDates.at(-1)! ? endDate : postDates.at(-1)!;
+    if (startDate > endDate) return emptyCorrelation();
+  }
+
   const registrationsByDate = new Map(registrations.map((item) => [item.date, item]));
   const posts = socialPosts.filter((post) => post.publishedDate >= startDate && post.publishedDate <= endDate);
   const postsByDate = new Map<string, SocialPost[]>();
@@ -469,7 +477,7 @@ export async function getDashboardData(): Promise<DashboardData> {
   }));
 
   const correlations: Record<string, DashboardCorrelation> = {
-    all: buildCorrelation(registrationRows, socialPosts),
+    all: buildCorrelation(registrationRows, socialPosts, "overlap"),
   };
   events.forEach((event) => {
     correlations[event.id] = buildCorrelation(recordsByEvent.get(event.id) ?? [], socialPosts);

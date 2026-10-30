@@ -20,7 +20,7 @@ export function SocialConnectionStatus({ initialStatus = "waiting" }: SocialConn
   useEffect(() => {
     let isCurrent = true;
 
-    fetch("/api/integrations/instagram/status", { cache: "no-store" })
+    fetch("/api/integrations/instagram/status", { cache: "force-cache" })
       .then(async (response) => {
         if (!response.ok) return;
         const payload = await response.json() as { status?: ConnectionStatus };

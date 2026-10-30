@@ -1,4 +1,6 @@
 import { getApiUserAccess, isAdministrator } from "@/lib/auth/access";
+import { revalidateDashboardData } from "@/lib/dashboard-data";
+import { revalidateInstagramContentSummary } from "@/lib/instagram-data";
 import { decryptInstagramToken } from "@/lib/instagram/oauth";
 import { syncInstagramMedia } from "@/lib/instagram/meta-sync";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -47,6 +49,8 @@ export async function POST() {
         last_sync_error: null,
       }).eq("id", connection.id),
     ]);
+    revalidateDashboardData();
+    revalidateInstagramContentSummary();
     return Response.json(result);
   } catch {
     await Promise.all([

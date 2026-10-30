@@ -1,4 +1,6 @@
 import { getApiUserAccess, isAdministrator } from "@/lib/auth/access";
+import { revalidateDashboardData } from "@/lib/dashboard-data";
+import { revalidateInstagramContentSummary } from "@/lib/instagram-data";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath } from "next/cache";
 
@@ -81,6 +83,8 @@ export async function PATCH(request: Request) {
     }
 
     revalidatePath("/divulgacao");
+    revalidateDashboardData();
+    revalidateInstagramContentSummary();
     return Response.json({
       status: "confirmed",
       categoryCount: uniqueCategoryIds.length,
@@ -97,5 +101,7 @@ export async function PATCH(request: Request) {
   if (error) return jsonError("Não foi possível rejeitar as sugestões.", 500);
 
   revalidatePath("/divulgacao");
+  revalidateDashboardData();
+  revalidateInstagramContentSummary();
   return Response.json({ status: "rejected" });
 }

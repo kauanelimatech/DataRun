@@ -25,5 +25,5 @@ export async function GET() {
     ? connection.status
     : "waiting";
 
-  return Response.json({ status }, { headers: { "Cache-Control": "no-store" } });
+  return Response.json({ status }, { headers: { "Cache-Control": "private, max-age=60, stale-while-revalidate=300" } });
 }

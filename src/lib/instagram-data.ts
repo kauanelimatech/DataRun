@@ -1,6 +1,9 @@
 import "server-only";
 
+import { revalidateTag, unstable_cache } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
+
+export const INSTAGRAM_CONTENT_CACHE_TAG = "datarun-instagram-content";
 
 type CategoryRow = {
   id: string;
@@ -122,7 +125,7 @@ async function getAllPostCategoryRows(): Promise<PostCategoryRow[]> {
   }
 }
 
-export async function getInstagramContentSummary(): Promise<InstagramContentSummary> {
+async function readInstagramContentSummary(): Promise<InstagramContentSummary> {
   const admin = createAdminClient();
   const [assignments, { data: categories, error: categoriesError }, { count: postCount, error: postsError }, { data: connection, error: connectionError }] = await Promise.all([
     getAllPostCategoryRows(),
@@ -156,6 +159,20 @@ export async function getInstagramContentSummary(): Promise<InstagramContentSumm
       lastSyncedAt: connectionRow.last_synced_at,
     } : null,
   };
+}
+
+const getCachedInstagramContentSummary = unstable_cache(
+  readInstagramContentSummary,
+  ["instagram-content-summary-v1"],
+  { revalidate: 300, tags: [INSTAGRAM_CONTENT_CACHE_TAG] },
+);
+
+export function getInstagramContentSummary(): Promise<InstagramContentSummary> {
+  return getCachedInstagramContentSummary();
+}
+
+export function revalidateInstagramContentSummary() {
+  revalidateTag(INSTAGRAM_CONTENT_CACHE_TAG, { expire: 0 });
 }
 
 type CategorizedPostRow = {

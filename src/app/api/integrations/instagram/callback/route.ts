@@ -2,6 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 
 import { NextResponse } from "next/server";
 import { getApiUserAccess, isAdministrator } from "@/lib/auth/access";
+import { revalidateInstagramContentSummary } from "@/lib/instagram-data";
 import { encryptInstagramToken, exchangeInstagramAuthorizationCode, getInstagramAccount } from "@/lib/instagram/oauth";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -56,6 +57,7 @@ export async function GET(request: Request) {
         last_sync_error: null,
       }, { onConflict: "instagram_user_id" });
     if (saveError) throw new Error("Não foi possível salvar a conexão autorizada.");
+    revalidateInstagramContentSummary();
     return redirectToOutreach(request, "connected");
   } catch {
     return redirectToOutreach(request, "connection-error");

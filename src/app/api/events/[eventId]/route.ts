@@ -1,4 +1,5 @@
 import { getApiUserAccess, isAdministrator } from "@/lib/auth/access";
+import { revalidateDashboardData } from "@/lib/dashboard-data";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
@@ -45,6 +46,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ ev
   if (error) return jsonError("Não foi possível atualizar as datas do evento.", 500);
   if (!data) return jsonError("Este evento não foi encontrado.", 404);
 
+  revalidateDashboardData();
   return Response.json({ eventId: data.id, eventDate: data.event_date, firstLotEndsOn: data.first_lot_ends_on });
 }
 
@@ -73,5 +75,6 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
   const { error: deleteEventError } = await admin.from("events").delete().eq("id", eventId);
   if (deleteEventError) return jsonError("Não foi possível excluir o evento.", 500);
 
+  revalidateDashboardData();
   return Response.json({ deletedEventId: eventId, deletedRegistrations: registrationCount ?? 0 });
 }

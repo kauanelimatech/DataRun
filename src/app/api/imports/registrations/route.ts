@@ -2,6 +2,7 @@ import { createHash, createHmac } from "node:crypto";
 
 import { type ParsedRegistration, parseRegistrationFile, RegistrationFileValidationError } from "@/lib/imports/registration-file";
 import { getApiUserAccess, isAdministrator } from "@/lib/auth/access";
+import { revalidateDashboardData } from "@/lib/dashboard-data";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
@@ -228,6 +229,8 @@ export async function POST(request: Request) {
       })
       .eq("id", importId);
     if (finishError) throw new Error("As inscrições foram gravadas, mas o histórico da importação não pôde ser concluído.");
+
+    revalidateDashboardData();
 
     return Response.json({
       importId,

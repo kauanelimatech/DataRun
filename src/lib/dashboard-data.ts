@@ -1,8 +1,12 @@
 import "server-only";
 
+import { revalidateTag, unstable_cache } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 const PAGE_SIZE = 1_000;
+const PAGE_CONCURRENCY = 4;
+
+export const DASHBOARD_DATA_CACHE_TAG = "datarun-dashboard-data";
 
 type EventRow = {
   id: string;
@@ -208,33 +212,35 @@ function daily(records: RegistrationRow[]) {
   return Array.from(totals.values()).sort((left, right) => left.date.localeCompare(right.date));
 }
 
-async function fetchAllRegistrations() {
-  const admin = createAdminClient();
-  const records: RegistrationRow[] = [];
-  let from = 0;
-
-  while (true) {
-    const { data, error } = await admin
-      .from("event_registrations")
-      .select("event_id, registered_on, final_amount, registration_status, purchase_status, lot_name, kit_name, route_name, city, age_range")
-      .range(from, from + PAGE_SIZE - 1);
-    if (error) throw new Error("Não foi possível carregar as inscrições do painel.");
-    const page = (data ?? []) as RegistrationRow[];
-    records.push(...page);
-    if (page.length < PAGE_SIZE) return records;
-    from += PAGE_SIZE;
-  }
-}
-
 type PageResult<T> = {
   data: T[] | null;
   error: unknown;
+  count?: number | null;
 };
 
 async function fetchAllPages<T>(fetchPage: (from: number, to: number) => Promise<PageResult<T>>) {
-  const rows: T[] = [];
+  const firstPage = await fetchPage(0, PAGE_SIZE - 1);
+  if (firstPage.error) throw new Error("Não foi possível carregar os dados do painel.");
 
-  for (let from = 0; ; from += PAGE_SIZE) {
+  const rows = [...(firstPage.data ?? [])];
+  const totalCount = firstPage.count;
+
+  if (typeof totalCount === "number") {
+    for (let from = PAGE_SIZE; from < totalCount; from += PAGE_SIZE * PAGE_CONCURRENCY) {
+      const results = await Promise.all(Array.from({ length: PAGE_CONCURRENCY }, (_, index) => {
+        const start = from + index * PAGE_SIZE;
+        return start < totalCount ? fetchPage(start, Math.min(start + PAGE_SIZE - 1, totalCount - 1)) : null;
+      }).filter((result): result is Promise<PageResult<T>> => result !== null));
+
+      results.forEach((result) => {
+        if (result.error) throw new Error("Não foi possível carregar os dados do painel.");
+        rows.push(...(result.data ?? []));
+      });
+    }
+    return rows;
+  }
+
+  for (let from = PAGE_SIZE; ; from += PAGE_SIZE) {
     const { data, error } = await fetchPage(from, from + PAGE_SIZE - 1);
     if (error) throw new Error("Não foi possível carregar os dados sociais para o painel.");
 
@@ -244,23 +250,32 @@ async function fetchAllPages<T>(fetchPage: (from: number, to: number) => Promise
   }
 }
 
+async function fetchAllRegistrations() {
+  const admin = createAdminClient();
+  return fetchAllPages<RegistrationRow>(async (from, to) => admin
+    .from("event_registrations")
+    .select("event_id, registered_on, final_amount, registration_status, purchase_status, lot_name, kit_name, route_name, city, age_range", { count: from === 0 ? "exact" : undefined })
+    .order("id", { ascending: true })
+    .range(from, to));
+}
+
 async function fetchSocialPosts(): Promise<SocialPost[]> {
   const admin = createAdminClient();
   const [posts, snapshots, assignments, categories] = await Promise.all([
     fetchAllPages<InstagramPostRow>(async (from, to) => admin
       .from("instagram_posts")
-      .select("id, caption, permalink, published_at, media_type")
+      .select("id, caption, permalink, published_at, media_type", { count: from === 0 ? "exact" : undefined })
       .order("id", { ascending: true })
       .range(from, to)),
     fetchAllPages<InstagramMetricSnapshotRow>(async (from, to) => admin
       .from("instagram_post_metric_snapshots")
-      .select("post_id, collected_at, reach, views, likes, comments, shares, saves")
+      .select("post_id, collected_at, reach, views, likes, comments, shares, saves", { count: from === 0 ? "exact" : undefined })
       .order("post_id", { ascending: true })
       .order("collected_at", { ascending: true })
       .range(from, to)),
     fetchAllPages<InstagramCategoryAssignmentRow>(async (from, to) => admin
       .from("instagram_post_categories")
-      .select("post_id, category_id, review_status, updated_at")
+      .select("post_id, category_id, review_status, updated_at", { count: from === 0 ? "exact" : undefined })
       .order("post_id", { ascending: true })
       .order("category_id", { ascending: true })
       .range(from, to)),
@@ -426,7 +441,7 @@ function buildCorrelation(records: RegistrationRow[], socialPosts: SocialPost[],
   };
 }
 
-export async function getDashboardData(): Promise<DashboardData> {
+async function readDashboardData(): Promise<DashboardData> {
   const admin = createAdminClient();
   const [{ data: eventRows, error: eventError }, registrationRows, { data: importRows, error: importError }, socialPosts] = await Promise.all([
     admin.from("events").select("id, name, edition_year, source_stage, event_date, first_lot_ends_on").order("event_date", { ascending: false, nullsFirst: false }).order("edition_year", { ascending: false }).order("name"),
@@ -487,6 +502,20 @@ export async function getDashboardData(): Promise<DashboardData> {
   });
 
   return { events, allEvents: combineEvents(events), imports, correlations };
+}
+
+const getCachedDashboardData = unstable_cache(
+  readDashboardData,
+  ["dashboard-data-v1"],
+  { revalidate: 300, tags: [DASHBOARD_DATA_CACHE_TAG] },
+);
+
+export function getDashboardData(): Promise<DashboardData> {
+  return getCachedDashboardData();
+}
+
+export function revalidateDashboardData() {
+  revalidateTag(DASHBOARD_DATA_CACHE_TAG, { expire: 0 });
 }
 
 export function combineEvents(events: DashboardEvent[]): DashboardEvent {

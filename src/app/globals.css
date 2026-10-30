@@ -111,3 +111,14 @@ body { background: var(--page); font-family: Georgia, "Times New Roman", serif; 
 :root { --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; --font-display: Georgia, "Times New Roman", serif; }
 body, body * { font-family: var(--font-sans) !important; }
 body :is(h1, h2, h3, .analytics-metrics > article > span, .metric-card-top > span, .system-card .system-title) { font-family: var(--font-display) !important; }
+
+/* Slightly larger interface text for comfortable dashboard reading. */
+body { font-size: 15px; }
+.nav-link, .header-select, .header-import, .event-filter-row button { font-size: 14px !important; }
+.page-eyebrow, .sync-banner, .sync-banner strong, .sync-banner a, .correlation-header p, .section-top p, .chart-legend, .metric-detail, .timeline-summary, .timeline-summary b, .event-page-action p, .event-card p, .impact-table th, .impact-table td, .memory-file b, .memory-file i, .memory-file p, .import-card-heading p:last-child, .import-guidance > p:not(.section-kicker), .import-actions p, .login-card > p:not(.section-kicker), .login-card label, .access-intro > div:first-child > p:last-child, .access-create-card > p:not(.section-kicker), .access-guidance-card > p:last-child, .access-guidance-card li, .access-result > p { font-size: 12px !important; }
+.section-kicker, .nav-group-label, .system-card, .review-tag, .review-tag small, .review-post-meta, .review-controls label, .review-suggestion, .review-controls > a, .lot-deadline-form label, .lot-deadline-success, .lot-deadline-error, .access-create-card label, .access-intro-count span, .access-intro-count small, .access-link-output strong, .access-link-output span, .access-user-identity small, .access-user-status small, .role-badge, .access-user-status strong { font-size: 10px !important; }
+.login-card input, .access-create-card input, .access-create-card select, .review-controls select, .lot-deadline-form input { font-size: 12px !important; }
+.category-card h2 { font-size: 14px !important; }
+
+/* Key quantitative values keep the original serif treatment. */
+body :is(.analytics-metrics article strong, .metric-value, .chart-summary strong, .timeline-summary strong, .breakdown-list strong, .event-card > div:last-child strong, .taxonomy-status strong, .category-counts strong, .access-intro-count strong, .metric-detail b, .impact-table td b) { font-family: var(--font-display) !important; }

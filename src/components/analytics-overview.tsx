@@ -57,8 +57,12 @@ function useAnimatedNumber(value: number, duration = 850) {
     }
 
     let frame = 0;
-    const startedAt = performance.now();
+    const startedAt = performance.now() + 120;
     const animate = (now: number) => {
+      if (now < startedAt) {
+        frame = requestAnimationFrame(animate);
+        return;
+      }
       const progress = Math.min(1, (now - startedAt) / duration);
       setDisplayValue(value * (1 - (1 - progress) ** 3));
       if (progress < 1) frame = requestAnimationFrame(animate);
@@ -83,7 +87,7 @@ function AnimatedCorrelation({ value }: { value: number | null }) {
 }
 
 function chartAnimationDelay(index: number, total: number, offset = 0) {
-  const interval = Math.min(55, Math.max(22, 680 / Math.max(total, 1)));
+  const interval = Math.min(90, Math.max(34, 1_100 / Math.max(total, 1)));
   return `${Math.round(offset + index * interval)}ms`;
 }
 
@@ -231,6 +235,7 @@ function registrationScale(highestValue: number) {
 }
 
 function CorrelationTimeline({ event, correlation, lotDeadlines }: { event: DashboardEvent; correlation: DashboardCorrelation; lotDeadlines: TimelineReference[] }) {
+  const [isAnimated, setIsAnimated] = useState(false);
   const isAllEvents = event.id === "all";
   const values = timelinePoints(correlation.daily, isAllEvents);
   const registrationGuides = registrationScale(Math.max(...values.map((item) => item.registrations), 1));
@@ -244,12 +249,18 @@ function CorrelationTimeline({ event, correlation, lotDeadlines }: { event: Dash
     ? [...(isAllEvents ? [] : fifthBusinessDays(correlation.startDate, correlation.endDate)), ...lotDeadlines.filter((deadline) => deadline.date >= correlation.startDate! && deadline.date <= correlation.endDate!)]
     : [];
 
+  useEffect(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const frame = requestAnimationFrame(() => setIsAnimated(true));
+    return () => cancelAnimationFrame(frame);
+  }, []);
+
   return <section className="correlation-panel registration-timeline-panel">
     <div className="correlation-header"><div><h2><span className="analytics-glyph chart">↗</span> Inscrições {isAllEvents ? "semanais" : "diárias"} × publicações do Instagram</h2><p>{isAllEvents ? "No consolidado, cada coluna representa uma semana do mês e a linha azul mostra as publicações no mesmo período comum." : "A etapa selecionada é exibida da primeira à última inscrição; posts fora desse intervalo não entram na comparação."}</p></div></div>
     {values.length === 0 ? <p className="empty-copy timeline-empty">Não há período em comum entre inscrições e posts neste recorte. Selecione uma etapa para ver toda a sua linha do tempo de inscrições.</p> : <>
       <div className="chart-legend correlation-legend"><span><i className="bar-key" />Inscrições por período</span><span><i className={isAllEvents ? "post-line-key" : "post-key"} />Publicações no Instagram</span>{!isAllEvents && <span><i className="business-day-key" />5º dia útil</span>}<span><i className="lot-deadline-key" />Fim do 1º lote</span><span><i className="line-key" />{formatCorrelation(correlation.correlationWithPosts)}</span></div>
       <div className="timeline-summary"><strong><AnimatedNumber value={event.totalRegistrations} format={(value) => formatNumber(Math.round(value))} /></strong><span>inscrições no recorte</span><b><AnimatedNumber value={correlation.postCount} format={(value) => formatNumber(Math.round(value))} duration={700} /> posts no mesmo período</b></div>
-      <div className="correlation-timeline" aria-label={`Gráfico de inscrições e posts ${isAllEvents ? "por semana" : "por dia"}`}>
+      <div className={`correlation-timeline is-prepared${isAnimated ? " is-animated" : ""}`} aria-label={`Gráfico de inscrições e posts ${isAllEvents ? "por semana" : "por dia"}`}>
         <div className="correlation-registration-guides" aria-hidden="true">{registrationGuides.guides.map((value) => <div className="correlation-registration-guide" key={value} style={{ bottom: `${(value / registrationGuides.maximum) * 100}%` }}><span>{formatNumber(value)}</span></div>)}</div>
         {isAllEvents && <svg className="correlation-post-line" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
           <path pathLength="1" d={postLinePath} />

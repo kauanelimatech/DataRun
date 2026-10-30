@@ -429,7 +429,7 @@ function buildCorrelation(records: RegistrationRow[], socialPosts: SocialPost[],
 export async function getDashboardData(): Promise<DashboardData> {
   const admin = createAdminClient();
   const [{ data: eventRows, error: eventError }, registrationRows, { data: importRows, error: importError }, socialPosts] = await Promise.all([
-    admin.from("events").select("id, name, edition_year, source_stage, event_date, first_lot_ends_on").order("edition_year", { ascending: false }).order("name"),
+    admin.from("events").select("id, name, edition_year, source_stage, event_date, first_lot_ends_on").order("event_date", { ascending: false, nullsFirst: false }).order("edition_year", { ascending: false }).order("name"),
     fetchAllRegistrations(),
     admin.from("registration_imports").select("id, source_file_name, status, source_record_count, inserted_record_count, updated_record_count, completed_at, created_at").order("created_at", { ascending: false }).limit(8),
     fetchSocialPosts(),

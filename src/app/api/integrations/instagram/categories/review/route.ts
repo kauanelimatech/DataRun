@@ -46,7 +46,7 @@ export async function PATCH(request: Request) {
       .from("instagram_post_categories")
       .update({ review_status: "rejected", updated_at: new Date().toISOString() })
       .eq("post_id", body.postId)
-      .eq("review_status", "suggested");
+      .in("review_status", ["suggested", "confirmed"]);
     if (rejectPreviousError) return jsonError("Não foi possível atualizar as sugestões anteriores.", 500);
 
     const { error: saveCategoriesError } = await admin

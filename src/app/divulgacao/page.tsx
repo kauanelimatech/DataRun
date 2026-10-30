@@ -1,4 +1,5 @@
 import { DashboardShell } from "@/components/dashboard-shell";
+import { InstagramCategoryManagement } from "@/components/instagram-category-management";
 import { InstagramReviewQueue } from "@/components/instagram-review-queue";
 import { InstagramSyncButton } from "@/components/instagram-sync-button";
 import { requireUser } from "@/lib/auth/require-user";
@@ -28,7 +29,7 @@ export default async function OutreachPage() {
           <p className="section-kicker">Taxonomia editorial</p>
           <h2>Categorias que ajudam a entender o que publicar</h2>
           <p>
-            Cada publicação pode ter mais de uma categoria. O DataRun cria sugestões a partir da legenda,
+            Cada publicação recebe uma única categoria. O DataRun cria sugestões a partir da legenda,
             hashtags, transcrição e descrição visual, que devem ser revisadas antes de entrarem nos relatórios.
           </p>
         </div>
@@ -46,7 +47,11 @@ export default async function OutreachPage() {
         {canManage && (content.connection?.status === "connected" ? <InstagramSyncButton /> : <a className="primary-button" href="/api/integrations/instagram/connect">Conectar Instagram</a>)}
       </section>
 
-      <section className="category-grid" aria-label="Categorias de conteúdo">
+      {canManage ? <InstagramCategoryManagement
+        categories={content.categories}
+        reviewCategories={categories}
+        unclassifiedPostCount={content.unclassifiedPostCount}
+      /> : <section className="category-grid" aria-label="Categorias de conteúdo">
         {content.categories.map((category) => (
           <article className="category-card" key={category.id}>
             <div className="category-card-heading">
@@ -59,7 +64,7 @@ export default async function OutreachPage() {
             </div>
           </article>
         ))}
-      </section>
+      </section>}
 
       {canManage && <InstagramReviewQueue
         suggestions={suggestions}

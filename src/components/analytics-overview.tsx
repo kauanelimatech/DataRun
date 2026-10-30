@@ -175,10 +175,25 @@ function timelineLabel(point: TimelineDisplayPoint, numberOfPoints: number) {
   return new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: numberOfPoints > 16 ? "short" : undefined, timeZone: "UTC" }).format(new Date(`${point.startDate}T00:00:00Z`));
 }
 
+function registrationScale(highestValue: number) {
+  if (highestValue <= 4) {
+    return { maximum: Math.max(highestValue, 1), guides: Array.from({ length: highestValue }, (_, index) => index + 1) };
+  }
+
+  const rawStep = highestValue / 4;
+  const magnitude = 10 ** Math.floor(Math.log10(rawStep));
+  const normalizedStep = rawStep / magnitude;
+  const step = (normalizedStep <= 1 ? 1 : normalizedStep <= 2 ? 2 : normalizedStep <= 5 ? 5 : 10) * magnitude;
+  const maximum = Math.ceil(highestValue / step) * step;
+  const guides: number[] = [];
+  for (let value = step; value <= maximum; value += step) guides.push(value);
+  return { maximum, guides };
+}
+
 function CorrelationTimeline({ event, correlation, lotDeadlines }: { event: DashboardEvent; correlation: DashboardCorrelation; lotDeadlines: TimelineReference[] }) {
   const isAllEvents = event.id === "all";
   const values = timelinePoints(correlation.daily, isAllEvents);
-  const maximumRegistrations = Math.max(...values.map((item) => item.registrations), 1);
+  const registrationGuides = registrationScale(Math.max(...values.map((item) => item.registrations), 1));
   const maximumPosts = Math.max(...values.map((item) => item.posts), 1);
   const postLinePath = values.map((item, index) => {
     const x = ((index + 0.5) / values.length) * 100;
@@ -191,7 +206,7 @@ function CorrelationTimeline({ event, correlation, lotDeadlines }: { event: Dash
 
   return <section className="correlation-panel registration-timeline-panel">
     <div className="correlation-header"><div><h2><span className="analytics-glyph chart">↗</span> Inscrições {isAllEvents ? "semanais" : "diárias"} × publicações do Instagram</h2><p>{isAllEvents ? "No consolidado, cada coluna representa uma semana do mês e a linha azul mostra as publicações no mesmo período comum." : "A etapa selecionada é exibida da primeira à última inscrição; posts fora desse intervalo não entram na comparação."}</p></div></div>
-    {values.length === 0 ? <p className="empty-copy timeline-empty">Não há período em comum entre inscrições e posts neste recorte. Selecione uma etapa para ver toda a sua linha do tempo de inscrições.</p> : <><div className="chart-legend correlation-legend"><span><i className="bar-key" />Inscrições por período</span><span><i className={isAllEvents ? "post-line-key" : "post-key"} />Publicações no Instagram</span>{!isAllEvents && <span><i className="business-day-key" />5º dia útil</span>}<span><i className="lot-deadline-key" />Fim do 1º lote</span><span><i className="line-key" />{formatCorrelation(correlation.correlationWithPosts)}</span></div><div className="timeline-summary"><strong>{formatNumber(event.totalRegistrations)}</strong><span>inscrições no recorte</span><b>{formatNumber(correlation.postCount)} posts no mesmo período</b></div><div className="correlation-timeline" aria-label={`Gráfico de inscrições e posts ${isAllEvents ? "por semana" : "por dia"}`}>{isAllEvents && <svg className="correlation-post-line" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><path d={postLinePath} /></svg>}{values.map((item) => { const markers = references.filter((reference) => reference.date >= item.startDate && reference.date <= item.endDate); return <div className="correlation-day" key={`${item.startDate}-${item.endDate}`} title={`${formatDate(item.startDate)}${item.startDate === item.endDate ? "" : ` a ${formatDate(item.endDate)}`}: ${item.registrations} inscrições e ${item.posts} post(s)`}><span className="correlation-registration-bar" style={{ height: `${Math.max((item.registrations / maximumRegistrations) * 100, item.registrations > 0 ? 3 : 0)}%` }} />{markers.map((marker, index) => <i className={`timeline-reference-marker ${marker.kind}`} key={`${marker.kind}-${marker.date}`} style={{ top: `${8 + index * 15}px` }} title={`${marker.label}: ${formatDate(marker.date)}`} />)}{!isAllEvents && item.posts > 0 && <i className="correlation-post-marker" style={{ bottom: `calc(18px + ${Math.max((item.posts / maximumPosts) * 72, 9)}%)` }}><b>{item.posts}</b></i>}<small>{timelineLabel(item, values.length)}</small></div>; })}</div><div className="timeline-caption"><span>{formatDate(correlation.startDate!)}</span><span>{formatDate(correlation.endDate!)}</span></div></>}
+    {values.length === 0 ? <p className="empty-copy timeline-empty">Não há período em comum entre inscrições e posts neste recorte. Selecione uma etapa para ver toda a sua linha do tempo de inscrições.</p> : <><div className="chart-legend correlation-legend"><span><i className="bar-key" />Inscrições por período</span><span><i className={isAllEvents ? "post-line-key" : "post-key"} />Publicações no Instagram</span>{!isAllEvents && <span><i className="business-day-key" />5º dia útil</span>}<span><i className="lot-deadline-key" />Fim do 1º lote</span><span><i className="line-key" />{formatCorrelation(correlation.correlationWithPosts)}</span></div><div className="timeline-summary"><strong>{formatNumber(event.totalRegistrations)}</strong><span>inscrições no recorte</span><b>{formatNumber(correlation.postCount)} posts no mesmo período</b></div><div className="correlation-timeline" aria-label={`Gráfico de inscrições e posts ${isAllEvents ? "por semana" : "por dia"}`}><div className="correlation-registration-guides" aria-hidden="true">{registrationGuides.guides.map((value) => <div className="correlation-registration-guide" key={value} style={{ bottom: `${(value / registrationGuides.maximum) * 100}%` }}><span>{formatNumber(value)}</span></div>)}</div>{isAllEvents && <svg className="correlation-post-line" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><path d={postLinePath} /></svg>}{values.map((item) => { const markers = references.filter((reference) => reference.date >= item.startDate && reference.date <= item.endDate); return <div className="correlation-day" key={`${item.startDate}-${item.endDate}`} title={`${formatDate(item.startDate)}${item.startDate === item.endDate ? "" : ` a ${formatDate(item.endDate)}`}: ${item.registrations} inscrições e ${item.posts} post(s)`}><span className="correlation-registration-bar" style={{ height: `${Math.max((item.registrations / registrationGuides.maximum) * 100, item.registrations > 0 ? 3 : 0)}%` }} />{markers.map((marker, index) => <i className={`timeline-reference-marker ${marker.kind}`} key={`${marker.kind}-${marker.date}`} style={{ top: `${8 + index * 15}px` }} title={`${marker.label}: ${formatDate(marker.date)}`} />)}{!isAllEvents && item.posts > 0 && <i className="correlation-post-marker" style={{ bottom: `calc(18px + ${Math.max((item.posts / maximumPosts) * 72, 9)}%)` }}><b>{item.posts}</b></i>}<small>{timelineLabel(item, values.length)}</small></div>; })}</div><div className="timeline-caption"><span>{formatDate(correlation.startDate!)}</span><span>{formatDate(correlation.endDate!)}</span></div></>}
   </section>;
 }
 

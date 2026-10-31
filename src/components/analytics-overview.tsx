@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import type { ContentCategoryImpact, DashboardCorrelation, DashboardData, DashboardEvent, PostCorrelationImpact, ValueBreakdown } from "@/lib/dashboard-data";
 
 function formatNumber(value: number) {
@@ -236,6 +236,7 @@ function registrationScale(highestValue: number) {
 
 function CorrelationTimeline({ event, correlation, lotDeadlines }: { event: DashboardEvent; correlation: DashboardCorrelation; lotDeadlines: TimelineReference[] }) {
   const [isAnimated, setIsAnimated] = useState(false);
+  const postLineClipId = useId().replace(/:/g, "");
   const isAllEvents = event.id === "all";
   const values = timelinePoints(correlation.daily, isAllEvents);
   const registrationGuides = registrationScale(Math.max(...values.map((item) => item.registrations), 1));
@@ -263,7 +264,8 @@ function CorrelationTimeline({ event, correlation, lotDeadlines }: { event: Dash
       <div className={`correlation-timeline is-prepared${isAnimated ? " is-animated" : ""}`} aria-label={`Gráfico de inscrições e posts ${isAllEvents ? "por semana" : "por dia"}`}>
         <div className="correlation-registration-guides" aria-hidden="true">{registrationGuides.guides.map((value) => <div className="correlation-registration-guide" key={value} style={{ bottom: `${(value / registrationGuides.maximum) * 100}%` }}><span>{formatNumber(value)}</span></div>)}</div>
         {isAllEvents && <svg className="correlation-post-line" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-          <path pathLength="1" d={postLinePath} />
+          <defs><clipPath id={postLineClipId}><rect className="correlation-post-line-reveal" x="0" y="0" width="100" height="100" /></clipPath></defs>
+          <path d={postLinePath} clipPath={`url(#${postLineClipId})`} />
         </svg>}
         {values.map((item, itemIndex) => {
           const markers = references.filter((reference) => reference.date >= item.startDate && reference.date <= item.endDate);

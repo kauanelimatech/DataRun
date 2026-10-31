@@ -264,12 +264,6 @@ function CorrelationTimeline({ event, correlation, lotDeadlines }: { event: Dash
         <div className="correlation-registration-guides" aria-hidden="true">{registrationGuides.guides.map((value) => <div className="correlation-registration-guide" key={value} style={{ bottom: `${(value / registrationGuides.maximum) * 100}%` }}><span>{formatNumber(value)}</span></div>)}</div>
         {isAllEvents && <svg className="correlation-post-line" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
           <path pathLength="1" d={postLinePath} />
-          {values.map((item, index) => {
-            if (item.posts === 0) return null;
-            const x = ((index + 0.5) / values.length) * 100;
-            const y = Math.max(4, 100 - (item.posts / maximumPosts) * 92);
-            return <circle className="correlation-post-line-point" cx={x} cy={y} r="1.25" key={`${item.startDate}-post`} style={{ animationDelay: chartAnimationDelay(index, values.length, 420) }} />;
-          })}
         </svg>}
         {values.map((item, itemIndex) => {
           const markers = references.filter((reference) => reference.date >= item.startDate && reference.date <= item.endDate);
